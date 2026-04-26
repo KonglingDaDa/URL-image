@@ -57,6 +57,32 @@ If the user did not specify a size, choose:
   --moderation auto
 ```
 
+## Calling the skill with parameters
+
+Codex skills do not have a strict argument protocol. If the user writes `key=value` or natural-language parameter instructions, map them to the matching script flags.
+
+Examples:
+
+```text
+$image-curl prompt="可爱猫女" output="./catgirl.png" size="1024x1024" quality="auto" format="png"
+```
+
+```text
+$image-curl prompt="一只猫咪" output="./cat.png" base_url="https://api.example.com/v1" api_key="<API_KEY>"
+```
+
+```text
+$image-curl 画一只可爱猫咪，保存为 ./cat.png，尺寸 1024x1024，使用 base_url=https://api.example.com/v1，api_key=<API_KEY>
+```
+
+```text
+$image-curl 画一只猫咪，保存为 ./cat.png，使用环境变量 IMAGE_CURL_BASE_URL 和 IMAGE_CURL_API_KEY
+```
+
+Prefer environment variables for secrets. Avoid asking the user to put a real API key in chat unless they explicitly choose to do so.
+
+Supported chat-level fields map to script flags: `prompt`, `output`, `size`, `quality`, `format`, `moderation`, `background`, `metadata`, `overwrite`, `dry_run`, `base_url`, and `api_key`.
+
 Useful options:
 
 - `--prompt-file <txt>` for long or multiline prompts

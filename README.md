@@ -61,6 +61,40 @@ $image-curl 生成一张横版赛博城市壁纸，保存为 ./cyber-city.png
 画一只坐在窗边的橘猫，温暖自然光，保存到当前目录
 ```
 
+### 调用 skill 时传参
+
+Codex skill 没有固定的参数协议。你可以在聊天里用 `key=value` 写清楚参数，Codex 会把它们转换成脚本参数。
+
+常规参数：
+
+```text
+$image-curl prompt="可爱猫女" output="./catgirl.png" size="1024x1024" quality="auto" format="png"
+```
+
+自定义 base URL 和 API key：
+
+```text
+$image-curl prompt="一只猫咪" output="./cat.png" base_url="https://api.example.com/v1" api_key="<API_KEY>"
+```
+
+自然语言写法也可以：
+
+```text
+$image-curl 画一只可爱猫咪，保存为 ./cat.png，尺寸 1024x1024，使用 base_url=https://api.example.com/v1，api_key=<API_KEY>
+```
+
+更推荐把密钥放在环境变量里，不要把真实 API key 发进聊天：
+
+```text
+$image-curl 画一只猫咪，保存为 ./cat.png，使用环境变量 IMAGE_CURL_BASE_URL 和 IMAGE_CURL_API_KEY
+```
+
+可在聊天中表达的常用参数：
+
+```text
+prompt, output, size, quality, format, moderation, background, metadata, overwrite, dry_run, base_url, api_key
+```
+
 ### 直接运行脚本
 
 ```bash
@@ -234,6 +268,40 @@ Plain image requests may also trigger the skill:
 
 ```text
 Draw an orange cat sitting beside a window in warm natural light and save it in the current directory.
+```
+
+### Passing Parameters To The Skill
+
+Codex skills do not have a strict argument protocol. You can write `key=value` arguments in chat, and Codex maps them to script flags.
+
+Common parameters:
+
+```text
+$image-curl prompt="cute catgirl" output="./catgirl.png" size="1024x1024" quality="auto" format="png"
+```
+
+Custom base URL and API key:
+
+```text
+$image-curl prompt="A cat" output="./cat.png" base_url="https://api.example.com/v1" api_key="<API_KEY>"
+```
+
+Natural language works too:
+
+```text
+$image-curl Draw a cute cat and save it as ./cat.png, size 1024x1024, using base_url=https://api.example.com/v1 and api_key=<API_KEY>
+```
+
+Prefer environment variables for secrets instead of sending a real API key in chat:
+
+```text
+$image-curl Draw a cat, save it as ./cat.png, and use IMAGE_CURL_BASE_URL and IMAGE_CURL_API_KEY from the environment.
+```
+
+Common fields you can express in chat:
+
+```text
+prompt, output, size, quality, format, moderation, background, metadata, overwrite, dry_run, base_url, api_key
 ```
 
 ### Running The Script Directly
