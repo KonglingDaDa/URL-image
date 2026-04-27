@@ -14,6 +14,7 @@ Options:
   --quality VALUE       Default: auto
   --format FORMAT       png, jpeg, or webp. Default: png
   --moderation VALUE    Default: auto
+  --count N, --n N      Number of images to request in one API call. Default: 1, max: 10
   --metadata FILE       Save response metadata with b64_json omitted
   --base-url URL        Override local Codex config base_url
   --api-key KEY         Override local Codex auth API key
@@ -37,6 +38,7 @@ size="1024x1024"
 quality="auto"
 format="png"
 moderation="auto"
+count="1"
 metadata=""
 base_url=""
 api_key=""
@@ -56,6 +58,7 @@ while [[ $# -gt 0 ]]; do
     --quality) quality="${2:-}"; shift 2 ;;
     --format|--output-format) format="${2:-}"; shift 2 ;;
     --moderation) moderation="${2:-}"; shift 2 ;;
+    --count|--n) count="${2:-}"; shift 2 ;;
     --metadata|--metadata-path) metadata="${2:-}"; shift 2 ;;
     --base-url) base_url="${2:-}"; shift 2 ;;
     --api-key) api_key="${2:-}"; shift 2 ;;
@@ -96,6 +99,7 @@ if [[ "$format" == "jpg" ]]; then
   format="jpeg"
 fi
 [[ "$timeout" =~ ^[0-9]+$ && "$timeout" -gt 0 ]] || die "--timeout must be a positive integer."
+[[ "$count" =~ ^[0-9]+$ && "$count" -ge 1 && "$count" -le 10 ]] || die "--count/--n must be an integer between 1 and 10."
 
 if [[ -n "$prompt" && -n "$prompt_file" ]]; then
   die "Provide either --prompt or --prompt-file, not both."
@@ -121,7 +125,7 @@ done
 output="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$output")"
 output_dir="$(dirname "$output")"
 [[ -d "$output_dir" ]] || mkdir -p "$output_dir"
-if [[ -e "$output" && "$overwrite" -ne 1 ]]; then
+if [[ "$count" -eq 1 && -e "$output" && "$overwrite" -ne 1 ]]; then
   die "Output already exists: $output (use --overwrite to replace it)"
 fi
 
@@ -129,6 +133,28 @@ if [[ -n "$metadata" ]]; then
   metadata="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$metadata")"
   mkdir -p "$(dirname "$metadata")"
 fi
+
+python3 - "$output" "$format" "$count" "$overwrite" <<'PY'
+import sys
+from pathlib import Path
+
+output = Path(sys.argv[1])
+output_format = sys.argv[2]
+count = int(sys.argv[3])
+overwrite = sys.argv[4] == "1"
+
+def targets_for(output_path, output_format, count):
+    if count == 1:
+        return [output_path]
+    suffix = output_path.suffix or f".{output_format}"
+    stem = output_path.stem if output_path.suffix else output_path.name
+    return [output_path.with_name(f"{stem}-{index}{suffix}") for index in range(1, count + 1)]
+
+if not overwrite:
+    conflicts = [str(path) for path in targets_for(output, output_format, count) if path.exists()]
+    if conflicts:
+        raise SystemExit("Output already exists: " + ", ".join(conflicts) + " (use --overwrite to replace)")
+PY
 
 config_json="$(python3 - "$base_url" "$api_key" <<'PY'
 import json
@@ -266,11 +292,11 @@ else
 fi
 
 if [[ "$dry_run" -eq 1 ]]; then
-  python3 - "$endpoint" "$model" "$prompt" "$size" "$quality" "$format" "$moderation" "$output" "$metadata" "${resolved_images[@]}" <<'PY'
+  python3 - "$endpoint" "$model" "$prompt" "$size" "$quality" "$format" "$moderation" "$count" "$output" "$metadata" "${resolved_images[@]}" <<'PY'
 import json
 import sys
 
-endpoint, model, prompt, size, quality, output_format, moderation, output, metadata, *images = sys.argv[1:]
+endpoint, model, prompt, size, quality, output_format, moderation, count, output, metadata, *images = sys.argv[1:]
 print(json.dumps({
     "endpoint": endpoint,
     "authorization": "Bearer ***",
@@ -281,9 +307,11 @@ print(json.dumps({
         "quality": quality,
         "output_format": output_format,
         "moderation": moderation,
+        "n": int(count),
         "image[]": images,
     },
     "output": output,
+    "count": int(count),
     "metadata": metadata or None,
 }, ensure_ascii=False, indent=2))
 PY
@@ -308,6 +336,7 @@ curl_args=(
   --form-string "quality=$quality"
   --form-string "output_format=$format"
   --form-string "moderation=$moderation"
+  --form-string "n=$count"
 )
 
 for image in "${resolved_images[@]}"; do
@@ -316,7 +345,7 @@ done
 
 curl "${curl_args[@]}" > "$response_file"
 
-python3 - "$response_file" "$output" "$metadata" <<'PY'
+python3 - "$response_file" "$output" "$metadata" "$format" "$count" <<'PY'
 import base64
 import json
 import sys
@@ -325,6 +354,8 @@ from pathlib import Path
 response_path = Path(sys.argv[1])
 output_path = Path(sys.argv[2])
 metadata_path = Path(sys.argv[3]) if sys.argv[3] else None
+output_format = sys.argv[4]
+requested_count = int(sys.argv[5])
 
 try:
     response = json.loads(response_path.read_text(encoding="utf-8"))
@@ -335,28 +366,54 @@ data = response.get("data")
 if not isinstance(data, list) or not data:
     raise SystemExit("Response JSON does not contain data[0].")
 
-b64 = data[0].get("b64_json") if isinstance(data[0], dict) else None
-if not isinstance(b64, str) or not b64:
-    raise SystemExit("Response JSON does not contain data[0].b64_json.")
+def targets_for(output_path, output_format, count):
+    if count == 1:
+        return [output_path]
+    suffix = output_path.suffix or f".{output_format}"
+    stem = output_path.stem if output_path.suffix else output_path.name
+    return [output_path.with_name(f"{stem}-{index}{suffix}") for index in range(1, count + 1)]
 
-try:
-    image_bytes = base64.b64decode(b64, validate=True)
-except Exception as exc:
-    raise SystemExit(f"Invalid base64 image data: {exc}")
+target_count = requested_count if requested_count > 1 else len(data)
+targets = targets_for(output_path, output_format, target_count)
+saved_files = []
 
-output_path.write_bytes(image_bytes)
+for index, item in enumerate(data):
+    b64 = item.get("b64_json") if isinstance(item, dict) else None
+    if not isinstance(b64, str) or not b64:
+        raise SystemExit(f"Response JSON does not contain data[{index}].b64_json.")
+    try:
+        image_bytes = base64.b64decode(b64, validate=True)
+    except Exception as exc:
+        raise SystemExit(f"Invalid base64 image data at data[{index}]: {exc}")
+
+    target = targets[index]
+    target.write_bytes(image_bytes)
+    saved_files.append({
+        "file": str(target),
+        "bytes": len(image_bytes),
+        "revised_prompt": item.get("revised_prompt") if isinstance(item, dict) else None,
+    })
 
 if metadata_path:
     sanitized = json.loads(json.dumps(response))
     for item in sanitized.get("data", []):
         if isinstance(item, dict) and "b64_json" in item:
             item["b64_json"] = "<omitted>"
-    sanitized["saved_file"] = str(output_path)
+    sanitized["saved_files"] = [entry["file"] for entry in saved_files]
+    sanitized["requested_count"] = requested_count
     metadata_path.write_text(json.dumps(sanitized, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-print(json.dumps({
-    "saved_file": str(output_path),
-    "bytes": len(image_bytes),
-    "revised_prompt": data[0].get("revised_prompt") if isinstance(data[0], dict) else None,
-}, ensure_ascii=False))
+if requested_count == 1 and len(saved_files) == 1:
+    result = {
+        "saved_file": saved_files[0]["file"],
+        "bytes": saved_files[0]["bytes"],
+        "revised_prompt": saved_files[0]["revised_prompt"],
+    }
+else:
+    result = {
+        "saved_files": saved_files,
+        "requested_count": requested_count,
+        "returned_count": len(saved_files),
+    }
+print(json.dumps(result, ensure_ascii=False))
 PY

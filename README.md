@@ -107,8 +107,25 @@ $image-curl 画一只猫咪，保存为 ./cat.png，使用环境变量 IMAGE_CUR
 可在聊天中表达的常用参数：
 
 ```text
-prompt, output, size, quality, format, moderation, background, metadata, overwrite, dry_run, base_url, api_key
+prompt, output, size, count, n, quality, format, moderation, background, metadata, overwrite, dry_run, base_url, api_key
 ```
+
+一次请求生成多张时使用 `count` 或 `n`：
+
+```text
+$image-curl prompt="四张不同风格的新疆旅游海报" output="./xinjiang-poster.png" size="1280x1920" count=4
+```
+
+这会向 API 传 `n=4`，并保存为：
+
+```text
+xinjiang-poster-1.png
+xinjiang-poster-2.png
+xinjiang-poster-3.png
+xinjiang-poster-4.png
+```
+
+脚本会保存响应中 `data[]` 返回的所有图片。如果某个上游接受但忽略 `n` 参数，输出 JSON 会显示 `requested_count` 和 `returned_count`，用于识别这种不匹配。
 
 图生图还支持重复传 `image`：
 
@@ -141,6 +158,7 @@ $image-curl prompt="新疆旅游宣传海报" output="./xinjiang.png" size="1280
   --prompt "一只可爱的猫咪，毛茸茸的，正坐着看向镜头，干净背景，温暖自然光，写实风格，高质量" \
   --output ./cat.png \
   --size 1024x1024 \
+  --count 1 \
   --quality auto \
   --format png \
   --moderation auto
@@ -155,6 +173,7 @@ $image-curl prompt="新疆旅游宣传海报" output="./xinjiang.png" size="1280
   --prompt "把背景换成星空，保留主体轮廓和服装细节" \
   --output ./edited.png \
   --size 1024x1024 \
+  --count 1 \
   --quality auto \
   --format png \
   --moderation auto
@@ -231,6 +250,7 @@ API key 读取顺序：
 --output FILE          输出图片路径，必填
 --model NAME           默认 gpt-image-2
 --size SIZE            auto 或任意上游支持的 宽x高；边长为 16 倍数，最长边 <=3840，宽高比 <=3:1，总像素在 [655360,8294400]
+--count N, --n N       一次 API 请求返回的图片数量，默认 1，最大 10
 --quality VALUE        默认 auto
 --format FORMAT        png, jpeg, webp
 --moderation VALUE     默认 auto
@@ -261,6 +281,7 @@ curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/generations" \
     "model": "gpt-image-2",
     "prompt": "一只猫咪",
     "size": "1024x1024",
+    "n": 1,
     "quality": "auto",
     "output_format": "png",
     "moderation": "auto"
@@ -277,6 +298,7 @@ curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/edits" \
   -F "model=gpt-image-2" \
   -F "prompt=把背景换成星空" \
   -F "size=1024x1024" \
+  -F "n=1" \
   -F "quality=auto" \
   -F "output_format=png" \
   -F "moderation=auto" \
@@ -395,8 +417,25 @@ $image-curl Draw a cat, save it as ./cat.png, and use IMAGE_CURL_BASE_URL and IM
 Common fields you can express in chat:
 
 ```text
-prompt, output, size, quality, format, moderation, background, metadata, overwrite, dry_run, base_url, api_key
+prompt, output, size, count, n, quality, format, moderation, background, metadata, overwrite, dry_run, base_url, api_key
 ```
+
+Use `count` or `n` to request multiple images in one API call:
+
+```text
+$image-curl prompt="Four Xinjiang travel posters in different styles" output="./xinjiang-poster.png" size="1280x1920" count=4
+```
+
+This sends `n=4` to the API and saves:
+
+```text
+xinjiang-poster-1.png
+xinjiang-poster-2.png
+xinjiang-poster-3.png
+xinjiang-poster-4.png
+```
+
+The script saves every image returned in `data[]`. If an upstream accepts but ignores the `n` parameter, the output JSON includes `requested_count` and `returned_count` so the mismatch is visible.
 
 For image-to-image edits, repeat the `image` field:
 
@@ -429,6 +468,7 @@ Confirmed upstream limits:
   --prompt "A cute fluffy cat sitting and looking at the camera, clean background, warm natural light, realistic style, high quality" \
   --output ./cat.png \
   --size 1024x1024 \
+  --count 1 \
   --quality auto \
   --format png \
   --moderation auto
@@ -443,6 +483,7 @@ Confirmed upstream limits:
   --prompt "Replace the background with a starry sky while preserving the subject details" \
   --output ./edited.png \
   --size 1024x1024 \
+  --count 1 \
   --quality auto \
   --format png \
   --moderation auto
@@ -519,6 +560,7 @@ Shared options for `generate_image.sh` and `edit_image.sh`:
 --output FILE          output image path, required
 --model NAME           default: gpt-image-2
 --size SIZE            auto or any upstream-supported WIDTHxHEIGHT; edges multiple of 16, longest edge <=3840, aspect ratio <=3:1, total pixels in [655360,8294400]
+--count N, --n N       number of images returned by one API request, default 1, max 10
 --quality VALUE        default: auto
 --format FORMAT        png, jpeg, webp
 --moderation VALUE     default: auto
@@ -549,6 +591,7 @@ curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/generations" \
     "model": "gpt-image-2",
     "prompt": "A cat",
     "size": "1024x1024",
+    "n": 1,
     "quality": "auto",
     "output_format": "png",
     "moderation": "auto"
@@ -565,6 +608,7 @@ curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/edits" \
   -F "model=gpt-image-2" \
   -F "prompt=Replace the background with a starry sky" \
   -F "size=1024x1024" \
+  -F "n=1" \
   -F "quality=auto" \
   -F "output_format=png" \
   -F "moderation=auto" \
