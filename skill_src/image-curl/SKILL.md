@@ -35,7 +35,9 @@ The upstream supports arbitrary `WIDTHxHEIGHT` sizes within its available 1K, 2K
 Confirmed upstream constraints:
 
 - longest edge must be less than or equal to `3840`
+- both edges must be multiples of `16`
 - maximum supported aspect ratio is `3:1`
+- total pixels must be in `[655360, 8294400]`
 
 Selection rules:
 
@@ -50,7 +52,7 @@ Examples:
 
 - wide poster or banner: `1536x864`, `1600x900`, or another suitable wide size
 - 4K horizontal long image: `3840x1280`
-- vertical poster or phone wallpaper: `900x1600`, `1024x1536`, or another suitable tall size
+- vertical poster or phone wallpaper: `896x1600`, `1024x1536`, or another suitable tall size
 - square avatar/icon: `1024x1024`
 
 ## Workflow

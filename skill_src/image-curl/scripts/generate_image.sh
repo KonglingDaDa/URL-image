@@ -9,7 +9,7 @@ Usage:
 
 Options:
   --model NAME          Image model. Default: gpt-image-2
-  --size SIZE           auto or WIDTHxHEIGHT. Longest edge <= 3840, aspect ratio <= 3:1
+  --size SIZE           auto or WIDTHxHEIGHT. Edges multiple of 16, max edge 3840, ratio <= 3:1
   --quality VALUE       Default: auto
   --format FORMAT       png, jpeg, or webp. Default: png
   --moderation VALUE    Default: auto
@@ -76,11 +76,18 @@ if [[ "$size" != "auto" ]]; then
   [[ "$size" =~ ^([1-9][0-9]*)x([1-9][0-9]*)$ ]] || die "--size must be auto or WIDTHxHEIGHT, for example 1024x1024, 1344x768, 2048x1152."
   width="${BASH_REMATCH[1]}"
   height="${BASH_REMATCH[2]}"
+  pixel_count=$(( width * height ))
   if (( width > 3840 || height > 3840 )); then
     die "--size '$size' is not supported by the upstream: the longest edge must be less than or equal to 3840."
   fi
+  if (( width % 16 != 0 || height % 16 != 0 )); then
+    die "--size '$size' is not supported by the upstream: both edges must be multiples of 16."
+  fi
   if (( width > height * 3 || height > width * 3 )); then
     die "--size '$size' is not supported by the upstream: the maximum supported aspect ratio is 3:1."
+  fi
+  if (( pixel_count < 655360 || pixel_count > 8294400 )); then
+    die "--size '$size' is not supported by the upstream: total pixels must be between 655360 and 8294400."
   fi
 fi
 [[ "$format" =~ ^(png|jpeg|jpg|webp)$ ]] || die "--format must be png, jpeg, jpg, or webp."
