@@ -1,21 +1,22 @@
 ---
 name: image-curl
-description: Use when the user asks Codex to draw, generate, create, or render a bitmap image as a local file, including generic Chinese requests such as "画一张图", "生成一张海报", or "做一张插画". This skill calls an OpenAI-compatible `/v1/images/generations` endpoint directly with curl, reading the base URL and API key from local Codex config instead of using cpa or cliproxy CLI commands.
+description: Use when the user asks Codex to draw, generate, create, edit, transform, or do image-to-image work as a local bitmap file, including generic Chinese requests such as "画一张图", "生成一张海报", "做一张插画", or "把这张图的背景换成星空". This skill calls OpenAI-compatible `/v1/images/generations` and `/v1/images/edits` endpoints directly with curl, reading the base URL and API key from local Codex config instead of using cpa or cliproxy CLI commands.
 ---
 
 # Image Curl
 
 ## Overview
 
-Generate local bitmap image files by POSTing directly to the configured OpenAI-compatible image endpoint with `curl`. Do not use `cpa`, `cliproxy-image-cli`, or other image CLIs for this skill.
+Generate or edit local bitmap image files by POSTing directly to the configured OpenAI-compatible image endpoint with `curl`. Do not use `cpa`, `cliproxy-image-cli`, or other image CLIs for this skill.
 
 ## When to use
 
 - The user asks to draw, generate, create, render, or make a raster image and wants a local file result.
+- The user asks to transform one or more local images with a prompt, such as changing a background, restyling a product photo, or combining references.
 - The request is a generic prompt such as "画一只猫咪", "生成一张横版封面", "做一张产品海报", or "create an avatar".
 - The user asks to use the local Codex/OpenAI-compatible image API configuration.
 
-Do not use this skill for web image search, SVG/vector-only work, or image editing/inpainting. This skill only covers text-to-image generation through `images/generations`.
+Do not use this skill for web image search or SVG/vector-only work. This skill covers text-to-image generation through `images/generations` and image-to-image edits through `images/edits`.
 
 ## Defaults
 
@@ -59,16 +60,31 @@ Examples:
 
 1. Decide the output path. If the user did not provide one, save in the current working directory with a descriptive, non-overwriting filename such as `generated-image.png`.
 2. Decide whether the user's prompt is already specific enough for `gpt-image-2`. If it is vague, rewrite it into a concise image-ready prompt before calling the API.
-3. Run this skill's `scripts/generate_image.sh`. The script builds JSON, calls `curl -X POST <base>/v1/images/generations`, saves the raw response temporarily, decodes `data[0].b64_json`, and writes the image file.
-4. Verify the command exits with code `0` and the output file exists and is non-empty.
-5. Report the saved path to the user. Mention metadata only when requested.
+3. For text-to-image, run this skill's `scripts/generate_image.sh`. The script builds JSON, calls `curl -X POST <base>/v1/images/generations`, saves the raw response temporarily, decodes `data[0].b64_json`, and writes the image file.
+4. For image-to-image edits, run this skill's `scripts/edit_image.sh`. The script sends multipart form data to `curl -X POST <base>/v1/images/edits`, including repeated `image[]=@<file>` fields.
+5. Verify the command exits with code `0` and the output file exists and is non-empty.
+6. Report the saved path to the user. Mention metadata only when requested.
 
-## Command
+## Text-to-image command
 
 ```bash
 ~/.codex/skills/image-curl/scripts/generate_image.sh \
   --prompt "一只可爱的猫咪，毛茸茸的，正坐着看向镜头，干净背景，温暖自然光，写实风格，高质量" \
   --output ./cat.png \
+  --size 1024x1024 \
+  --quality auto \
+  --format png \
+  --moderation auto
+```
+
+## Image-to-image command
+
+```bash
+~/.codex/skills/image-curl/scripts/edit_image.sh \
+  --image ./photo1.png \
+  --image ./photo2.jpg \
+  --prompt "把背景换成星空，保留主体轮廓和服装细节" \
+  --output ./edited.png \
   --size 1024x1024 \
   --quality auto \
   --format png \
@@ -99,7 +115,17 @@ $image-curl 画一只猫咪，保存为 ./cat.png，使用环境变量 IMAGE_CUR
 
 Prefer environment variables for secrets. Avoid asking the user to put a real API key in chat unless they explicitly choose to do so.
 
-Supported chat-level fields map to script flags: `prompt`, `output`, `size`, `quality`, `format`, `moderation`, `background`, `metadata`, `overwrite`, `dry_run`, `base_url`, and `api_key`. `size` can be `auto` or any upstream-supported `WIDTHxHEIGHT`; keep the user's requested aspect ratio.
+Supported text-to-image chat-level fields map to script flags: `prompt`, `output`, `size`, `quality`, `format`, `moderation`, `background`, `metadata`, `overwrite`, `dry_run`, `base_url`, and `api_key`. For image-to-image, also support repeated `image` fields. `size` can be `auto` or any upstream-supported `WIDTHxHEIGHT`; keep the user's requested aspect ratio.
+
+Image-to-image examples:
+
+```text
+$image-curl image="./photo1.png" prompt="把背景换成星空" output="./starry.png" size="1024x1024"
+```
+
+```text
+$image-curl image="./photo1.png" image="./photo2.jpg" prompt="融合两张参考图，生成统一风格海报" output="./merged.png"
+```
 
 Useful options:
 
@@ -125,6 +151,23 @@ curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/generations" \
     "output_format": "png",
     "moderation": "auto"
   }'
+```
+
+For image-to-image edits, the request shape is:
+
+```bash
+curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/edits" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Cache-Control: no-store, no-cache, max-age=0" \
+  -H "Pragma: no-cache" \
+  -F "model=gpt-image-2" \
+  -F "prompt=把背景换成星空" \
+  -F "size=1024x1024" \
+  -F "quality=auto" \
+  -F "output_format=png" \
+  -F "moderation=auto" \
+  -F "image[]=@photo1.png" \
+  -F "image[]=@photo2.jpg"
 ```
 
 ## Failure handling

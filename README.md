@@ -1,10 +1,10 @@
 # image-curl
 
-`image-curl` is a Codex skill for generating local image files by calling an OpenAI-compatible image endpoint directly with `curl`.
+`image-curl` is a Codex skill for generating and editing local image files by calling OpenAI-compatible image endpoints directly with `curl`.
 
-`image-curl` 是一个 Codex skill，用于通过 `curl` 直接调用 OpenAI 兼容图片接口，并把生成结果保存为本地图片文件。
+`image-curl` 是一个 Codex skill，用于通过 `curl` 直接调用 OpenAI 兼容图片接口，并把文生图或图生图结果保存为本地图片文件。
 
-- Direct API call: `POST /v1/images/generations`
+- Direct API calls: `POST /v1/images/generations`, `POST /v1/images/edits`
 - Default model: `gpt-image-2`
 - No `cpa`, no `cliproxy-image-cli`, no extra image CLI dependency
 - Reads `base_url` and API key from local Codex config by default
@@ -14,13 +14,14 @@
 
 ### 功能
 
-- 在 Codex 中通过 `$image-curl` 生成图片
+- 在 Codex 中通过 `$image-curl` 生成或编辑图片
 - 默认读取本机 Codex 配置，不需要在 prompt 里写 API key
 - 直接使用 `curl -X POST <base>/v1/images/generations`
+- 直接使用 multipart `curl -X POST <base>/v1/images/edits` 做图生图
 - 自动解码响应里的 `data[0].b64_json`
 - 支持输出文件、metadata、覆盖保护、dry run
 
-这个 skill 只做文字生成图片，不做图片编辑、蒙版、网页搜图或 SVG 编辑。
+这个 skill 支持文字生成图片和基于本地图片的图生图/编辑，不做网页搜图或 SVG 编辑。
 
 ### 安装
 
@@ -31,6 +32,7 @@ cd image-curl
 mkdir -p ~/.codex/skills
 cp -R ./skill_src/image-curl ~/.codex/skills/image-curl
 chmod +x ~/.codex/skills/image-curl/scripts/generate_image.sh
+chmod +x ~/.codex/skills/image-curl/scripts/edit_image.sh
 ```
 
 如果你使用了自定义 `CODEX_HOME`：
@@ -39,6 +41,7 @@ chmod +x ~/.codex/skills/image-curl/scripts/generate_image.sh
 mkdir -p "$CODEX_HOME/skills"
 cp -R ./skill_src/image-curl "$CODEX_HOME/skills/image-curl"
 chmod +x "$CODEX_HOME/skills/image-curl/scripts/generate_image.sh"
+chmod +x "$CODEX_HOME/skills/image-curl/scripts/edit_image.sh"
 ```
 
 ### 在 Codex 中使用
@@ -59,6 +62,18 @@ $image-curl 生成一张横版赛博城市壁纸，保存为 ./cyber-city.png
 
 ```text
 画一只坐在窗边的橘猫，温暖自然光，保存到当前目录
+```
+
+图生图/图片编辑：
+
+```text
+$image-curl image="./photo1.png" prompt="把背景换成星空" output="./starry.png"
+```
+
+多图参考：
+
+```text
+$image-curl image="./photo1.png" image="./photo2.jpg" prompt="融合两张参考图，生成统一风格海报" output="./merged.png"
 ```
 
 ### 调用 skill 时传参
@@ -95,6 +110,12 @@ $image-curl 画一只猫咪，保存为 ./cat.png，使用环境变量 IMAGE_CUR
 prompt, output, size, quality, format, moderation, background, metadata, overwrite, dry_run, base_url, api_key
 ```
 
+图生图还支持重复传 `image`：
+
+```text
+$image-curl image="./photo1.png" image="./photo2.jpg" prompt="把背景换成星空" output="./edited.png"
+```
+
 `size` 可以写成 `auto` 或任意上游支持的 `宽x高`，例如：
 
 ```text
@@ -113,10 +134,26 @@ $image-curl prompt="新疆旅游宣传海报" output="./xinjiang.png" size="1280
 
 ### 直接运行脚本
 
+#### 文生图
+
 ```bash
 ~/.codex/skills/image-curl/scripts/generate_image.sh \
   --prompt "一只可爱的猫咪，毛茸茸的，正坐着看向镜头，干净背景，温暖自然光，写实风格，高质量" \
   --output ./cat.png \
+  --size 1024x1024 \
+  --quality auto \
+  --format png \
+  --moderation auto
+```
+
+#### 图生图/图片编辑
+
+```bash
+~/.codex/skills/image-curl/scripts/edit_image.sh \
+  --image ./photo1.png \
+  --image ./photo2.jpg \
+  --prompt "把背景换成星空，保留主体轮廓和服装细节" \
+  --output ./edited.png \
   --size 1024x1024 \
   --quality auto \
   --format png \
@@ -186,6 +223,8 @@ API key 读取顺序：
 
 ### 参数
 
+`generate_image.sh` 和 `edit_image.sh` 通用参数：
+
 ```text
 --prompt TEXT          图片提示词
 --prompt-file FILE     从文件读取提示词
@@ -202,9 +241,15 @@ API key 读取顺序：
 --dry-run              打印脱敏请求信息，不调用接口
 ```
 
+`edit_image.sh` 额外参数：
+
+```text
+--image FILE           输入图片路径，可重复传多个
+```
+
 ### 请求格式
 
-脚本最终发送的请求形态如下：
+文生图请求形态：
 
 ```bash
 curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/generations" \
@@ -222,6 +267,23 @@ curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/generations" \
   }'
 ```
 
+图生图请求形态：
+
+```bash
+curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/edits" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Cache-Control: no-store, no-cache, max-age=0" \
+  -H "Pragma: no-cache" \
+  -F "model=gpt-image-2" \
+  -F "prompt=把背景换成星空" \
+  -F "size=1024x1024" \
+  -F "quality=auto" \
+  -F "output_format=png" \
+  -F "moderation=auto" \
+  -F "image[]=@photo1.png" \
+  -F "image[]=@photo2.jpg"
+```
+
 ### 项目结构
 
 ```text
@@ -232,6 +294,7 @@ skill_src/
       openai.yaml
     scripts/
       generate_image.sh
+      edit_image.sh
 README.md
 ```
 
@@ -239,13 +302,14 @@ README.md
 
 ### What It Does
 
-- Lets Codex generate images through `$image-curl`
+- Lets Codex generate or edit images through `$image-curl`
 - Reuses local Codex configuration, so prompts do not need API keys
 - Calls `curl -X POST <base>/v1/images/generations` directly
+- Calls multipart `curl -X POST <base>/v1/images/edits` for image-to-image edits
 - Decodes `data[0].b64_json` into a local image file
 - Supports output paths, metadata export, overwrite protection, and dry runs
 
-This skill is for text-to-image generation only. It does not handle image editing, masks, web image search, or SVG editing.
+This skill supports text-to-image generation and local image-to-image edits. It does not handle web image search or SVG editing.
 
 ### Installation
 
@@ -256,6 +320,7 @@ cd image-curl
 mkdir -p ~/.codex/skills
 cp -R ./skill_src/image-curl ~/.codex/skills/image-curl
 chmod +x ~/.codex/skills/image-curl/scripts/generate_image.sh
+chmod +x ~/.codex/skills/image-curl/scripts/edit_image.sh
 ```
 
 If you use a custom `CODEX_HOME`:
@@ -264,6 +329,7 @@ If you use a custom `CODEX_HOME`:
 mkdir -p "$CODEX_HOME/skills"
 cp -R ./skill_src/image-curl "$CODEX_HOME/skills/image-curl"
 chmod +x "$CODEX_HOME/skills/image-curl/scripts/generate_image.sh"
+chmod +x "$CODEX_HOME/skills/image-curl/scripts/edit_image.sh"
 ```
 
 ### Using It In Codex
@@ -284,6 +350,18 @@ Plain image requests may also trigger the skill:
 
 ```text
 Draw an orange cat sitting beside a window in warm natural light and save it in the current directory.
+```
+
+Image-to-image edit:
+
+```text
+$image-curl image="./photo1.png" prompt="Replace the background with a starry sky" output="./starry.png"
+```
+
+Multiple reference images:
+
+```text
+$image-curl image="./photo1.png" image="./photo2.jpg" prompt="Combine both references into one unified poster style" output="./merged.png"
 ```
 
 ### Passing Parameters To The Skill
@@ -320,6 +398,12 @@ Common fields you can express in chat:
 prompt, output, size, quality, format, moderation, background, metadata, overwrite, dry_run, base_url, api_key
 ```
 
+For image-to-image edits, repeat the `image` field:
+
+```text
+$image-curl image="./photo1.png" image="./photo2.jpg" prompt="Replace the background with a starry sky" output="./edited.png"
+```
+
 `size` can be `auto` or any upstream-supported `WIDTHxHEIGHT`, for example:
 
 ```text
@@ -338,10 +422,26 @@ Confirmed upstream limits:
 
 ### Running The Script Directly
 
+#### Text-to-image
+
 ```bash
 ~/.codex/skills/image-curl/scripts/generate_image.sh \
   --prompt "A cute fluffy cat sitting and looking at the camera, clean background, warm natural light, realistic style, high quality" \
   --output ./cat.png \
+  --size 1024x1024 \
+  --quality auto \
+  --format png \
+  --moderation auto
+```
+
+#### Image-to-image edit
+
+```bash
+~/.codex/skills/image-curl/scripts/edit_image.sh \
+  --image ./photo1.png \
+  --image ./photo2.jpg \
+  --prompt "Replace the background with a starry sky while preserving the subject details" \
+  --output ./edited.png \
   --size 1024x1024 \
   --quality auto \
   --format png \
@@ -411,6 +511,8 @@ Do not commit real API keys to the repository.
 
 ### Options
 
+Shared options for `generate_image.sh` and `edit_image.sh`:
+
 ```text
 --prompt TEXT          image prompt
 --prompt-file FILE     read prompt from file
@@ -427,9 +529,15 @@ Do not commit real API keys to the repository.
 --dry-run              print redacted request details without calling the API
 ```
 
+Extra option for `edit_image.sh`:
+
+```text
+--image FILE           input image path, repeat for multiple images
+```
+
 ### Request Shape
 
-The script sends a request like this:
+Text-to-image request:
 
 ```bash
 curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/generations" \
@@ -447,6 +555,23 @@ curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/generations" \
   }'
 ```
 
+Image-to-image edit request:
+
+```bash
+curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/edits" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Cache-Control: no-store, no-cache, max-age=0" \
+  -H "Pragma: no-cache" \
+  -F "model=gpt-image-2" \
+  -F "prompt=Replace the background with a starry sky" \
+  -F "size=1024x1024" \
+  -F "quality=auto" \
+  -F "output_format=png" \
+  -F "moderation=auto" \
+  -F "image[]=@photo1.png" \
+  -F "image[]=@photo2.jpg"
+```
+
 ### Project Structure
 
 ```text
@@ -457,5 +582,6 @@ skill_src/
       openai.yaml
     scripts/
       generate_image.sh
+      edit_image.sh
 README.md
 ```
