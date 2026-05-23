@@ -1,6 +1,8 @@
 # image-curl
 
-`image-curl` is a Codex skill for generating and editing images in conversation through the [aicode.cat](https://aicode.cat) API relay and aggregation platform. It calls the image endpoints directly with `curl`, reads your local Codex API credentials, and saves the returned image as a local file.
+<p align="center">
+  <img src="assets/aicodecat-logo.svg" alt="AicodeCat logo" width="860">
+</p>
 
 `image-curl` 是面向 [aicode.cat](https://aicode.cat) API 中转聚合平台的 Codex 生图 skill，用于在对话中完成文生图、图生图和图片编辑。它通过 `curl` 直接调用 aicode.cat 图片接口，读取本机 Codex API 凭据，并把结果保存为本地图片文件。
 
