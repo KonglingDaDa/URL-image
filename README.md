@@ -1,9 +1,10 @@
 # image-curl
 
-`image-curl` is a Codex skill for generating and editing local image files by calling OpenAI-compatible image endpoints directly with `curl`.
+`image-curl` is a Codex skill for generating and editing images in conversation through the [aicode.cat](https://aicode.cat) API relay and aggregation platform. It calls the image endpoints directly with `curl`, reads your local Codex API credentials, and saves the returned image as a local file.
 
-`image-curl` 是一个 Codex skill，用于通过 `curl` 直接调用 OpenAI 兼容图片接口，并把文生图或图生图结果保存为本地图片文件。
+`image-curl` 是面向 [aicode.cat](https://aicode.cat) API 中转聚合平台的 Codex 生图 skill，用于在对话中完成文生图、图生图和图片编辑。它通过 `curl` 直接调用 aicode.cat 图片接口，读取本机 Codex API 凭据，并把结果保存为本地图片文件。
 
+- Built for conversational image generation through `https://aicode.cat`
 - Direct API calls: `POST /v1/images/generations`, `POST /v1/images/edits`
 - Default model: `gpt-image-2`
 - No `cpa`, no `cliproxy-image-cli`, no extra image CLI dependency
@@ -14,7 +15,7 @@
 
 ### 功能
 
-- 在 Codex 中通过 `$image-curl` 生成或编辑图片
+- 在 Codex 对话中通过 `$image-curl` 调用 aicode.cat 生成或编辑图片
 - 默认使用 `https://aicode.cat`，并读取本机 Codex 配置中的 API key
 - 直接使用 `curl -X POST https://aicode.cat/v1/images/generations`
 - 直接使用 multipart `curl -X POST https://aicode.cat/v1/images/edits` 做图生图
