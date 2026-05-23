@@ -5,3 +5,4 @@
 *.metadata.json
 cat.txt
 .DS_Store
+.omx/

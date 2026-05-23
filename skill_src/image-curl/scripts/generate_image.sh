@@ -18,7 +18,7 @@ Options:
   --background VALUE    Optional background value, for example transparent or auto
   --count N, --n N      Number of images to request in one API call. Default: 1, max: 10
   --metadata FILE       Save response metadata with b64_json omitted
-  --base-url URL        Override local Codex config base_url
+  --base-url URL        Override default base URL. Default: https://aicode.cat
   --api-key KEY         Override local Codex auth API key
   --timeout SECONDS     curl max time. Default: 300
   --overwrite           Allow replacing an existing output file
@@ -227,22 +227,8 @@ def normalize_base_url(value):
 base_url = first(
     override_base_url,
     os.environ.get("IMAGE_CURL_BASE_URL"),
-    os.environ.get("OPENAI_BASE_URL"),
-    os.environ.get("CLIPROXY_BASE_URL"),
+    "https://aicode.cat",
 )
-
-if not base_url:
-    provider = first(str(top.get("model_provider", "")))
-    if provider:
-        provider_base = tables.get(f"model_providers.{provider}", {}).get("base_url")
-        base_url = first(provider_base)
-
-if not base_url:
-    for name in sorted(tables):
-        if name.startswith("model_providers."):
-            base_url = first(tables[name].get("base_url"))
-            if base_url:
-                break
 
 api_key = first(
     override_api_key,

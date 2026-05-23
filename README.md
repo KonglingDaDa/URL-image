@@ -7,7 +7,7 @@
 - Direct API calls: `POST /v1/images/generations`, `POST /v1/images/edits`
 - Default model: `gpt-image-2`
 - No `cpa`, no `cliproxy-image-cli`, no extra image CLI dependency
-- Reads `base_url` and API key from local Codex config by default
+- Uses `https://aicode.cat` as the default base URL and reads the API key from local Codex config by default
 - Saves `data[0].b64_json` as a local `png`, `jpeg`, or `webp` file
 
 ## 中文说明
@@ -15,9 +15,9 @@
 ### 功能
 
 - 在 Codex 中通过 `$image-curl` 生成或编辑图片
-- 默认读取本机 Codex 配置，不需要在 prompt 里写 API key
-- 直接使用 `curl -X POST <base>/v1/images/generations`
-- 直接使用 multipart `curl -X POST <base>/v1/images/edits` 做图生图
+- 默认使用 `https://aicode.cat`，并读取本机 Codex 配置中的 API key
+- 直接使用 `curl -X POST https://aicode.cat/v1/images/generations`
+- 直接使用 multipart `curl -X POST https://aicode.cat/v1/images/edits` 做图生图
 - 自动解码响应里的 `data[0].b64_json`
 - 支持输出文件、metadata、覆盖保护、dry run
 
@@ -89,19 +89,19 @@ $image-curl prompt="可爱猫女" output="./catgirl.png" size="1024x1024" qualit
 自定义 base URL 和 API key：
 
 ```text
-$image-curl prompt="一只猫咪" output="./cat.png" base_url="https://api.example.com/v1" api_key="<API_KEY>"
+$image-curl prompt="一只猫咪" output="./cat.png" base_url="https://aicode.cat" api_key="<API_KEY>"
 ```
 
 自然语言写法也可以：
 
 ```text
-$image-curl 画一只可爱猫咪，保存为 ./cat.png，尺寸 1024x1024，使用 base_url=https://api.example.com/v1，api_key=<API_KEY>
+$image-curl 画一只可爱猫咪，保存为 ./cat.png，尺寸 1024x1024，使用 base_url=https://aicode.cat，api_key=<API_KEY>
 ```
 
 更推荐把密钥放在环境变量里，不要把真实 API key 发进聊天：
 
 ```text
-$image-curl 画一只猫咪，保存为 ./cat.png，使用环境变量 IMAGE_CURL_BASE_URL 和 IMAGE_CURL_API_KEY
+$image-curl 画一只猫咪，保存为 ./cat.png，使用默认域名 https://aicode.cat 和环境变量 IMAGE_CURL_API_KEY
 ```
 
 可在聊天中表达的常用参数：
@@ -205,7 +205,7 @@ $image-curl prompt="新疆旅游宣传海报" output="./xinjiang.png" size="1280
 
 ### 配置读取规则
 
-默认会从本机 Codex 配置读取：
+默认会从本机 Codex 配置读取 API key：
 
 ```text
 ~/.codex/config.toml
@@ -222,10 +222,7 @@ $CODEX_HOME/auth.json
 `base_url` 读取顺序：
 
 1. `IMAGE_CURL_BASE_URL`
-2. `OPENAI_BASE_URL`
-3. `CLIPROXY_BASE_URL`
-4. `config.toml` 中当前 `model_provider` 对应的 `base_url`
-5. `config.toml` 中第一个带 `base_url` 的 `model_providers.*`
+2. 默认值 `https://aicode.cat`
 
 API key 读取顺序：
 
@@ -238,7 +235,7 @@ API key 读取顺序：
 
 ```bash
 ~/.codex/skills/image-curl/scripts/generate_image.sh \
-  --base-url https://api.example.com/v1 \
+  --base-url https://aicode.cat \
   --api-key "$OPENAI_API_KEY" \
   --prompt "一只猫咪" \
   --output ./cat.png
@@ -279,7 +276,7 @@ API key 读取顺序：
 文生图请求形态：
 
 ```bash
-curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/generations" \
+curl -sS --fail-with-body -X POST "https://aicode.cat/v1/images/generations" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -H "Cache-Control: no-store, no-cache, max-age=0" \
@@ -299,7 +296,7 @@ curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/generations" \
 图生图请求形态：
 
 ```bash
-curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/edits" \
+curl -sS --fail-with-body -X POST "https://aicode.cat/v1/images/edits" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Cache-Control: no-store, no-cache, max-age=0" \
   -H "Pragma: no-cache" \
@@ -334,9 +331,10 @@ README.md
 ### What It Does
 
 - Lets Codex generate or edit images through `$image-curl`
-- Reuses local Codex configuration, so prompts do not need API keys
-- Calls `curl -X POST <base>/v1/images/generations` directly
-- Calls multipart `curl -X POST <base>/v1/images/edits` for image-to-image edits
+- Reuses local Codex auth, so prompts do not need API keys
+- Uses `https://aicode.cat` as the default base URL
+- Calls `curl -X POST https://aicode.cat/v1/images/generations` directly
+- Calls multipart `curl -X POST https://aicode.cat/v1/images/edits` for image-to-image edits
 - Decodes `data[0].b64_json` into a local image file
 - Supports output paths, metadata export, overwrite protection, and dry runs
 
@@ -408,19 +406,19 @@ $image-curl prompt="cute catgirl" output="./catgirl.png" size="1024x1024" qualit
 Custom base URL and API key:
 
 ```text
-$image-curl prompt="A cat" output="./cat.png" base_url="https://api.example.com/v1" api_key="<API_KEY>"
+$image-curl prompt="A cat" output="./cat.png" base_url="https://aicode.cat" api_key="<API_KEY>"
 ```
 
 Natural language works too:
 
 ```text
-$image-curl Draw a cute cat and save it as ./cat.png, size 1024x1024, using base_url=https://api.example.com/v1 and api_key=<API_KEY>
+$image-curl Draw a cute cat and save it as ./cat.png, size 1024x1024, using base_url=https://aicode.cat and api_key=<API_KEY>
 ```
 
 Prefer environment variables for secrets instead of sending a real API key in chat:
 
 ```text
-$image-curl Draw a cat, save it as ./cat.png, and use IMAGE_CURL_BASE_URL and IMAGE_CURL_API_KEY from the environment.
+$image-curl Draw a cat, save it as ./cat.png, and use the default https://aicode.cat domain with IMAGE_CURL_API_KEY from the environment.
 ```
 
 Common fields you can express in chat:
@@ -541,10 +539,7 @@ $CODEX_HOME/auth.json
 Base URL lookup order:
 
 1. `IMAGE_CURL_BASE_URL`
-2. `OPENAI_BASE_URL`
-3. `CLIPROXY_BASE_URL`
-4. `base_url` for the active `model_provider` in `config.toml`
-5. the first `model_providers.*` entry in `config.toml` with a `base_url`
+2. default value `https://aicode.cat`
 
 API key lookup order:
 
@@ -557,7 +552,7 @@ You can also override both explicitly:
 
 ```bash
 ~/.codex/skills/image-curl/scripts/generate_image.sh \
-  --base-url https://api.example.com/v1 \
+  --base-url https://aicode.cat \
   --api-key "$OPENAI_API_KEY" \
   --prompt "A cat" \
   --output ./cat.png
@@ -598,7 +593,7 @@ Extra option for `edit_image.sh`:
 Text-to-image request:
 
 ```bash
-curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/generations" \
+curl -sS --fail-with-body -X POST "https://aicode.cat/v1/images/generations" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -H "Cache-Control: no-store, no-cache, max-age=0" \
@@ -618,7 +613,7 @@ curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/generations" \
 Image-to-image edit request:
 
 ```bash
-curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/edits" \
+curl -sS --fail-with-body -X POST "https://aicode.cat/v1/images/edits" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Cache-Control: no-store, no-cache, max-age=0" \
   -H "Pragma: no-cache" \

@@ -1,6 +1,6 @@
 ---
 name: image-curl
-description: Use when the user asks Codex to draw, generate, create, edit, transform, or do image-to-image work as a local bitmap file, including generic Chinese requests such as "画一张图", "生成一张海报", "做一张插画", or "把这张图的背景换成星空". This skill calls OpenAI-compatible `/v1/images/generations` and `/v1/images/edits` endpoints directly with curl, reading the base URL and API key from local Codex config instead of using cpa or cliproxy CLI commands.
+description: Use when the user asks Codex to draw, generate, create, edit, transform, or do image-to-image work as a local bitmap file, including generic Chinese requests such as "画一张图", "生成一张海报", "做一张插画", or "把这张图的背景换成星空". This skill calls OpenAI-compatible `/v1/images/generations` and `/v1/images/edits` endpoints directly with curl, using `https://aicode.cat` by default and reading the API key from environment variables or local Codex auth instead of using cpa or cliproxy CLI commands.
 ---
 
 # Image Curl
@@ -25,8 +25,8 @@ Do not use this skill for web image search or SVG/vector-only work. This skill c
 - Default quality: `auto`
 - Default output format: `png`
 - Default moderation: `auto`
-- Config source: `CODEX_HOME` when set, otherwise `~/.codex`
-- Base URL source order: `IMAGE_CURL_BASE_URL`, `OPENAI_BASE_URL`, `CLIPROXY_BASE_URL`, then `[model_providers.<model_provider>].base_url` in `config.toml`, then the first model provider with `base_url`
+- Config source for API keys: `CODEX_HOME` when set, otherwise `~/.codex`
+- Default base URL: `https://aicode.cat`; override with `IMAGE_CURL_BASE_URL` or `--base-url`
 - API key source order: `IMAGE_CURL_API_KEY`, `OPENAI_API_KEY`, `CLIPROXY_API_KEY`, then `auth.json` keys `OPENAI_API_KEY`, `OPENAI_API_TOKEN`, `api_key`, `token`, or `openai_api_key`
 
 ## Size selection
@@ -60,8 +60,8 @@ Examples:
 
 1. Decide the output path. If the user did not provide one, save in the current working directory with a descriptive, non-overwriting filename such as `generated-image.png`.
 2. Decide whether the user's prompt is already specific enough for `gpt-image-2`. If it is vague, rewrite it into a concise image-ready prompt before calling the API.
-3. For text-to-image, run this skill's `scripts/generate_image.sh`. The script builds JSON, calls `curl -X POST <base>/v1/images/generations`, saves the raw response temporarily, decodes returned `data[].b64_json`, and writes image files.
-4. For image-to-image edits, run this skill's `scripts/edit_image.sh`. The script sends multipart form data to `curl -X POST <base>/v1/images/edits`, including repeated `image[]=@<file>` fields.
+3. For text-to-image, run this skill's `scripts/generate_image.sh`. The script builds JSON, calls `curl -X POST https://aicode.cat/v1/images/generations` by default, saves the raw response temporarily, decodes returned `data[].b64_json`, and writes image files.
+4. For image-to-image edits, run this skill's `scripts/edit_image.sh`. The script sends multipart form data to `curl -X POST https://aicode.cat/v1/images/edits` by default, including repeated `image[]=@<file>` fields.
 5. Verify the command exits with code `0` and the output file exists and is non-empty.
 6. Report the saved path to the user. Mention metadata only when requested.
 
@@ -104,15 +104,15 @@ $image-curl prompt="可爱猫女" output="./catgirl.png" size="1024x1024" qualit
 ```
 
 ```text
-$image-curl prompt="一只猫咪" output="./cat.png" base_url="https://api.example.com/v1" api_key="<API_KEY>"
+$image-curl prompt="一只猫咪" output="./cat.png" base_url="https://aicode.cat" api_key="<API_KEY>"
 ```
 
 ```text
-$image-curl 画一只可爱猫咪，保存为 ./cat.png，尺寸 1024x1024，使用 base_url=https://api.example.com/v1，api_key=<API_KEY>
+$image-curl 画一只可爱猫咪，保存为 ./cat.png，尺寸 1024x1024，使用 base_url=https://aicode.cat，api_key=<API_KEY>
 ```
 
 ```text
-$image-curl 画一只猫咪，保存为 ./cat.png，使用环境变量 IMAGE_CURL_BASE_URL 和 IMAGE_CURL_API_KEY
+$image-curl 画一只猫咪，保存为 ./cat.png，使用默认域名 https://aicode.cat 和环境变量 IMAGE_CURL_API_KEY
 ```
 
 Prefer environment variables for secrets. Avoid asking the user to put a real API key in chat unless they explicitly choose to do so.
@@ -156,7 +156,7 @@ Useful options:
 The underlying request shape is:
 
 ```bash
-curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/generations" \
+curl -sS --fail-with-body -X POST "https://aicode.cat/v1/images/generations" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -H "Cache-Control: no-store, no-cache, max-age=0" \
@@ -176,7 +176,7 @@ curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/generations" \
 For image-to-image edits, the request shape is:
 
 ```bash
-curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/edits" \
+curl -sS --fail-with-body -X POST "https://aicode.cat/v1/images/edits" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Cache-Control: no-store, no-cache, max-age=0" \
   -H "Pragma: no-cache" \
@@ -194,7 +194,7 @@ curl -sS --fail-with-body -X POST "$BASE_URL/v1/images/edits" \
 
 ## Failure handling
 
-- Missing base URL: check `~/.codex/config.toml` or pass `--base-url`.
+- Base URL override: pass `--base-url` or set `IMAGE_CURL_BASE_URL`; otherwise `https://aicode.cat` is used.
 - Missing API key: check `~/.codex/auth.json` or pass `--api-key`.
 - Existing output: choose a new path or use `--overwrite` if the user approved replacement.
 - Non-JSON/HTTP error: preserve the error body in the command output and report the upstream message.
