@@ -1,7 +1,7 @@
 # image-curl
 
 <p align="center">
-  <img src="assets/aicodecat-logo.svg" alt="AicodeCat logo" width="860">
+  <img src="aicodecat.png" alt="AicodeCat logo">
 </p>
 
 `image-curl` 是面向 [aicode.cat](https://aicode.cat) API 中转聚合平台的 Codex 生图 skill，用于在对话中完成文生图、图生图和图片编辑。它通过 `curl` 直接调用 aicode.cat 图片接口，读取本机 Codex API 凭据，并把结果保存为本地图片文件。
