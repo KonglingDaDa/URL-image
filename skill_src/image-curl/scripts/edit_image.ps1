@@ -97,7 +97,7 @@ if ($outputDir -and -not (Test-Path -LiteralPath $outputDir)) {
 }
 
 $count = [int]$argsObj.count
-$targets = Get-OutputTargets -OutputPath $output -Format $format -Count $count
+$targets = [string[]]@(Get-OutputTargets -OutputPath $output -Format $format -Count $count)
 Assert-OutputTargetsAvailable -Targets $targets -Overwrite $argsObj.overwrite
 
 $metadata = ''
@@ -137,7 +137,7 @@ if ($argsObj.dry_run) {
         output        = $output
         count         = $count
         metadata      = if ($metadata) { $metadata } else { $null }
-    } | ConvertTo-Json -Depth 10
+    } | ConvertTo-ImageCurlJson -Depth 10
     exit 0
 }
 
@@ -161,7 +161,7 @@ try {
         $curlArgs += @('--form-string', "output_compression=$($argsObj.output_compression)")
     }
     foreach ($image in $resolvedImages) {
-        $curlArgs += @('-F', "image[]=@$image")
+        $curlArgs += @('-F', "image[]=@$(Get-CurlFilePath $image)")
     }
     $curlArgs += @('-o', $tempFile)
 
@@ -172,7 +172,7 @@ try {
     }
     $responseJson = Get-Content -LiteralPath $tempFile -Raw -Encoding UTF8
     $result = Save-ImageCurlResponse -ResponseJson $responseJson -OutputPath $output -MetadataPath $metadata -Format $format -RequestedCount $count
-    $result | ConvertTo-Json -Depth 10 -Compress
+    ConvertTo-ImageCurlJson -InputObject $result -Depth 10 -Compress
 } finally {
     if (Test-Path -LiteralPath $tempFile) {
         Remove-Item -LiteralPath $tempFile -Force

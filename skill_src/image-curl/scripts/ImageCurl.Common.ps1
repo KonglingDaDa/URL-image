@@ -119,7 +119,7 @@ function Get-OutputTargets {
         [int]$Count
     )
     if ($Count -eq 1) {
-        return ,$OutputPath
+        return @($OutputPath)
     }
     $resolved = [System.IO.Path]::GetFullPath($OutputPath)
     $dir = [System.IO.Path]::GetDirectoryName($resolved)
@@ -167,7 +167,7 @@ function Save-ImageCurlResponse {
     }
 
     $targetCount = if ($RequestedCount -gt 1) { $RequestedCount } else { $data.Count }
-    $targets = Get-OutputTargets -OutputPath $OutputPath -Format $Format -Count $targetCount
+    $targets = [string[]]@(Get-OutputTargets -OutputPath $OutputPath -Format $Format -Count $targetCount)
     $savedFiles = @()
 
     for ($index = 0; $index -lt $data.Count; $index++) {
@@ -188,7 +188,7 @@ function Save-ImageCurlResponse {
         }
         [System.IO.File]::WriteAllBytes($target, $bytes)
         $savedFiles += [pscustomobject]@{
-            file           = $target
+            path           = (Normalize-PathForJson $target)
             bytes          = $bytes.Length
             revised_prompt = $item.revised_prompt
         }
@@ -201,18 +201,18 @@ function Save-ImageCurlResponse {
                 $item.b64_json = '<omitted>'
             }
         }
-        $sanitized | Add-Member -NotePropertyName saved_files -NotePropertyValue @($savedFiles | ForEach-Object { $_.file }) -Force
+        $sanitized | Add-Member -NotePropertyName saved_files -NotePropertyValue @($savedFiles | ForEach-Object { $_.path }) -Force
         $sanitized | Add-Member -NotePropertyName requested_count -NotePropertyValue $RequestedCount -Force
         $metaDir = Split-Path -Parent $MetadataPath
         if ($metaDir -and -not (Test-Path -LiteralPath $metaDir)) {
             New-Item -ItemType Directory -Path $metaDir -Force | Out-Null
         }
-        $sanitized | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $MetadataPath -Encoding UTF8
+        ConvertTo-ImageCurlJson -InputObject $sanitized -Depth 20 | Set-Content -LiteralPath $MetadataPath -Encoding UTF8
     }
 
     if ($RequestedCount -eq 1 -and $savedFiles.Count -eq 1) {
         return [pscustomobject]@{
-            saved_file     = $savedFiles[0].file
+            saved_file     = $savedFiles[0].path
             bytes          = $savedFiles[0].bytes
             revised_prompt = $savedFiles[0].revised_prompt
         }
@@ -284,4 +284,59 @@ function Resolve-FullPath {
     param([string]$Path)
     if (-not $Path) { return '' }
     return [System.IO.Path]::GetFullPath($Path)
+}
+
+function Get-CurlFilePath {
+    param([string]$Path)
+    return (Normalize-PathForJson (Resolve-FullPath $Path))
+}
+
+function Normalize-PathForJson {
+    param([string]$Path)
+    if (-not $Path) { return $Path }
+    return $Path.Replace('\', '/')
+}
+
+function ConvertTo-ImageCurlJson {
+    [CmdletBinding()]
+    param(
+        [Parameter(ValueFromPipeline = $true, Position = 0)]
+        [object]$InputObject,
+        [int]$Depth = 10,
+        [switch]$Compress
+    )
+
+    process {
+        if ($null -eq $InputObject) { return }
+        $normalized = Normalize-ImageCurlObject -Object $InputObject
+        if ($Compress) {
+            $normalized | ConvertTo-Json -Depth $Depth -Compress
+        } else {
+            $normalized | ConvertTo-Json -Depth $Depth
+        }
+    }
+}
+
+function Normalize-ImageCurlObject {
+    param([object]$Object)
+
+    if ($null -eq $Object) { return $null }
+    if ($Object -is [string]) {
+        if ($Object -match '^[A-Za-z]:[\\/]' -or $Object -match '^\\\\') {
+            return (Normalize-PathForJson $Object)
+        }
+        return $Object
+    }
+    if ($Object -is [bool] -or $Object -is [int] -or $Object -is [long] -or $Object -is [double]) {
+        return $Object
+    }
+    if ($Object -is [System.Collections.IEnumerable] -and -not ($Object -is [string])) {
+        return @($Object | ForEach-Object { Normalize-ImageCurlObject -Object $_ })
+    }
+
+    $clone = [ordered]@{}
+    foreach ($prop in $Object.PSObject.Properties) {
+        $clone[$prop.Name] = Normalize-ImageCurlObject -Object $prop.Value
+    }
+    return [pscustomobject]$clone
 }
