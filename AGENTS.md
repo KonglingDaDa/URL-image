@@ -30,7 +30,7 @@ cp -R ./skill_src/image-curl ~/.codex/skills/image-curl
 chmod +x ~/.codex/skills/image-curl/scripts/*.sh
 ```
 
-在 Windows 上，请通过 Git Bash 或 WSL 运行这些脚本，并保持 LF 换行。
+在 Windows 上，请通过 Git Bash 或 WSL 运行这些脚本，并保持 LF 换行。本 skill 依赖 `bash`、`curl`、`python3` 三个本机命令；跨平台说明与 Agent 排障规则见 `README.md` 的「系统要求」与 `SKILL.md` 的「运行环境与跨平台」。
 
 ## 代码风格与命名约定
 

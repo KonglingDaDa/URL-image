@@ -27,6 +27,36 @@
 
 本技能支持文字生成图片和基于本地图片的图生图/编辑，不做网页搜图或 SVG 编辑。
 
+## 系统要求
+
+本 skill 的脚本是 Bash 程序，依赖以下三个本机命令：
+
+| 依赖 | 用途 |
+|---|---|
+| `bash` | 运行 `generate_image.sh`、`edit_image.sh` |
+| `curl` | 调用 aicode.cat 图片 API |
+| `python3` | 解析配置、组装请求、解码 base64 图片 |
+
+安装前先检查：
+
+```bash
+bash --version
+curl --version
+python3 --version
+```
+
+### macOS
+
+- 一般可直接使用，在终端（Terminal）里按下方安装步骤执行即可。
+- skill 安装路径：`~/.codex/skills/image-curl/`
+
+### Windows
+
+- **不要**在 PowerShell 或 CMD 里直接运行 `.sh` 脚本。
+- 请使用 **Git Bash** 或 **WSL**，并在该环境里执行全部安装与测试命令。
+- 若 Codex 本身运行在 WSL 中，路径与命令也应使用 WSL 环境，不要混用 Windows 路径与 Linux 路径。
+- skill 安装路径仍为：`~/.codex/skills/image-curl/`（对应当前 Bash 环境的主目录）
+
 ## 安装
 
 ```bash
