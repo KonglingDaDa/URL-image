@@ -1,10 +1,12 @@
-# image-curl
+# URL-image
 
 <p align="center">
   <img src="aicodecat.png" alt="AicodeCat logo">
 </p>
 
-`image-curl` 是面向 [aicode.cat](https://aicode.cat) API 中转聚合平台的 Codex 生图 skill，用于在对话中完成文生图、图生图和图片编辑。它通过 `curl` 直接调用 aicode.cat 图片接口，读取本机 Codex API 凭据，并把结果保存为本地图片文件。
+> Codex 生图 skill：`image-curl` — 通过 `curl` 调用 OpenAI 兼容图片 API，完成文生图、图生图与图片编辑。
+
+`URL-image` 仓库打包了面向 [aicode.cat](https://aicode.cat) API 中转聚合平台的 Codex 生图 skill。它通过 `curl` 直接调用图片接口，读取本机 Codex API 凭据，并把结果保存为本地图片文件。
 
 - Built for conversational image generation through `https://aicode.cat`
 - Direct API calls: `POST /v1/images/generations`, `POST /v1/images/edits`
@@ -29,8 +31,8 @@
 ### 安装
 
 ```bash
-git clone git@github.com:zwenooo/image-curl.git
-cd image-curl
+git clone https://github.com/KonglingDaDa/URL-image.git
+cd URL-image
 
 mkdir -p ~/.codex/skills
 cp -R ./skill_src/image-curl ~/.codex/skills/image-curl
@@ -346,8 +348,8 @@ This skill supports text-to-image generation and local image-to-image edits. It 
 ### Installation
 
 ```bash
-git clone git@github.com:zwenooo/image-curl.git
-cd image-curl
+git clone https://github.com/KonglingDaDa/URL-image.git
+cd URL-image
 
 mkdir -p ~/.codex/skills
 cp -R ./skill_src/image-curl ~/.codex/skills/image-curl
