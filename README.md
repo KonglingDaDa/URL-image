@@ -12,17 +12,17 @@
 - 直接调用 `POST /v1/images/generations` 与 `POST /v1/images/edits`
 - 默认模型：`gpt-image-2`
 - 不依赖 `cpa`、`cliproxy-image-cli` 或其他额外生图 CLI
-- 默认使用 `https://aicode.cat` 作为 base URL，并从本机 Codex 配置读取 API Key
-- 将响应中的 `data[0].b64_json` 解码保存为本地 `png`、`jpeg` 或 `webp` 文件
+- 默认使用 `https://aicode.cat` 作为 base URL，并从环境变量或 `auth.json` 读取 API Key
+- 将响应中的 `data[].b64_json` 解码保存为本地 `png`、`jpeg` 或 `webp` 文件
 - **用户一旦提出生图或改图需求，Codex 必须调用本技能，不得跳过脚本直接作答**
 
 ## 功能
 
 - 在 Codex 对话中通过 `$image-curl` 调用 aicode.cat 生成或编辑图片
-- 默认使用 `https://aicode.cat`，并读取本机 Codex 配置中的 API Key
+- 默认使用 `https://aicode.cat`，并从环境变量或 `auth.json` 读取 API Key
 - 直接使用 `curl -X POST https://aicode.cat/v1/images/generations`
 - 直接使用多部分（multipart）`curl -X POST https://aicode.cat/v1/images/edits` 做图生图
-- 自动解码响应里的 `data[0].b64_json`
+- 自动解码响应里的 `data[].b64_json`
 - 支持输出文件、metadata、覆盖保护、dry-run
 
 本技能支持文字生成图片和基于本地图片的图生图/编辑，不做网页搜图或 SVG 编辑。
@@ -209,26 +209,14 @@ dry-run，只检查配置和请求体，不调用接口：
 
 ## 配置读取规则
 
-默认会从本机 Codex 配置读取 API Key：
-
-```text
-~/.codex/config.toml
-~/.codex/auth.json
-```
-
-如果设置了 `CODEX_HOME`，则读取：
-
-```text
-$CODEX_HOME/config.toml
-$CODEX_HOME/auth.json
-```
+脚本会在 `CODEX_HOME`（未设置时默认为 `~/.codex`）下定位 `auth.json`，用于读取 API Key。
 
 `base_url` 读取顺序：
 
 1. `IMAGE_CURL_BASE_URL`
 2. 默认值 `https://aicode.cat`
 
-API Key读取顺序：
+API Key 读取顺序：
 
 1. `IMAGE_CURL_API_KEY`
 2. `OPENAI_API_KEY`
@@ -245,7 +233,7 @@ API Key读取顺序：
   --output ./cat.png
 ```
 
-不要把真实 API Key提交到 Git 仓库。
+不要把真实 API Key 提交到 Git 仓库。
 
 ## 参数
 
@@ -262,11 +250,16 @@ API Key读取顺序：
 --format FORMAT        png, jpeg, webp
 --output-compression N jpeg/webp 输出压缩级别，0-100
 --moderation VALUE     默认 auto
---background VALUE     可选，例如 transparent（透明）或 auto
 --metadata FILE        保存不含 b64_json 的响应 metadata
 --timeout SECONDS      curl 超时时间，默认 300
 --overwrite            允许覆盖已有输出文件
 --dry-run              dry-run 模式，打印脱敏请求信息，不调用接口
+```
+
+`generate_image.sh` 额外参数：
+
+```text
+--background VALUE     可选，例如 transparent（透明）或 auto
 ```
 
 `edit_image.sh` 额外参数：
