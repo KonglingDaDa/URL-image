@@ -1,6 +1,6 @@
 ---
 name: image-curl
-description: Use when the user asks Codex to draw, generate, create, edit, transform, or do image-to-image work as a local bitmap file, including generic Chinese requests such as "画一张图", "生成一张海报", "做一张插画", or "把这张图的背景换成星空". This skill calls OpenAI-compatible `/v1/images/generations` and `/v1/images/edits` endpoints directly with curl, using `https://aicode.cat` by default and reading the API key from environment variables or local Codex auth instead of using cpa or cliproxy CLI commands.
+description: Always invoke this skill when the user asks to draw, generate, create, edit, transform, or do image-to-image work as a local bitmap file, including generic Chinese requests such as "画一张图", "生成一张海报", "做一张插画", or "把这张图的背景换成星空". Do not answer image-generation requests without running this skill. This skill calls OpenAI-compatible `/v1/images/generations` and `/v1/images/edits` endpoints directly with curl, using `https://aicode.cat` by default and reading the API key from environment variables or local Codex auth instead of using cpa or cliproxy CLI commands.
 ---
 
 # Image Curl
@@ -8,6 +8,12 @@ description: Use when the user asks Codex to draw, generate, create, edit, trans
 ## Overview
 
 Generate or edit local bitmap image files by POSTing directly to the configured OpenAI-compatible image endpoint with `curl`. Do not use `cpa`, `cliproxy-image-cli`, or other image CLIs for this skill.
+
+## Mandatory invocation
+
+When the user asks to generate, draw, create, render, edit, or transform a raster image and expects a local image file, you must invoke this skill and run its scripts. This applies whether the user writes `$image-curl` explicitly or only uses natural language such as "画一张图", "帮我生成海报", or "把背景换成星空".
+
+Do not satisfy image-generation requests by guessing, describing an image in text only, or using another image CLI. Use this skill unless the request clearly falls into an excluded case below.
 
 ## When to use
 
