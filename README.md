@@ -12,14 +12,14 @@
 - 直接调用 `POST /v1/images/generations` 与 `POST /v1/images/edits`
 - 默认模型：`gpt-image-2`
 - 不依赖 `cpa`、`cliproxy-image-cli` 或其他额外生图 CLI
-- 默认使用 `https://aicode.cat` 作为 base URL，并从环境变量或 `auth.json` 读取 API Key
+- 默认使用 `https://aicode.cat` 作为 base URL，生图专用 API Key 仅写入 skill 目录 `local.env`
 - 将响应中的 `data[].b64_json` 解码保存为本地 `png`、`jpeg` 或 `webp` 文件
 - **用户一旦提出生图或改图需求，Codex 必须调用本技能，不得跳过脚本直接作答**
 
 ## 功能
 
 - 在 Codex 对话中通过 `$image-curl` 调用 aicode.cat 生成或编辑图片
-- 默认使用 `https://aicode.cat`，并从环境变量或 `auth.json` 读取 API Key
+- 默认使用 `https://aicode.cat`，生图专用 API Key 仅写入 skill 目录 `local.env`
 - 直接使用 `curl -X POST https://aicode.cat/v1/images/generations`
 - 直接使用多部分（multipart）`curl -X POST https://aicode.cat/v1/images/edits` 做图生图
 - 自动解码响应里的 `data[].b64_json`
@@ -37,6 +37,9 @@ mkdir -p ~/.codex/skills
 cp -R ./skill_src/image-curl ~/.codex/skills/image-curl
 chmod +x ~/.codex/skills/image-curl/scripts/generate_image.sh
 chmod +x ~/.codex/skills/image-curl/scripts/edit_image.sh
+
+cp ~/.codex/skills/image-curl/local.env.example ~/.codex/skills/image-curl/local.env
+chmod 600 ~/.codex/skills/image-curl/local.env
 ```
 
 如果你使用了自定义 `CODEX_HOME`：
@@ -46,7 +49,49 @@ mkdir -p "$CODEX_HOME/skills"
 cp -R ./skill_src/image-curl "$CODEX_HOME/skills/image-curl"
 chmod +x "$CODEX_HOME/skills/image-curl/scripts/generate_image.sh"
 chmod +x "$CODEX_HOME/skills/image-curl/scripts/edit_image.sh"
+
+cp "$CODEX_HOME/skills/image-curl/local.env.example" "$CODEX_HOME/skills/image-curl/local.env"
+chmod 600 "$CODEX_HOME/skills/image-curl/local.env"
 ```
+
+## 配置生图专用 Key（重要）
+
+用户在密钥页面为「绿色生图专用分组」新生成的 Key，**只能配置在本 skill 内**，不要写入全局客户端配置。
+
+**必须写入：**
+
+```text
+~/.codex/skills/image-curl/local.env
+```
+
+示例：
+
+```bash
+IMAGE_CURL_API_KEY=用户提供的生图专用-key
+IMAGE_CURL_BASE_URL=https://aicode.cat
+```
+
+脚本启动时会自动 `source` 该文件，仅对本 skill 生效。
+
+**禁止写入：**
+
+- `~/.codex/auth.json`
+- `~/.codex/config.toml`
+- `~/.claude/settings.json` 或 Claude 全局配置
+- 系统级 / 用户级全局环境变量（除非只是临时测试）
+
+不要把生图专用 Key 提交到 Git，也不要写进对话日志。
+
+安装完成后，用 dry-run 验证配置是否生效：
+
+```bash
+~/.codex/skills/image-curl/scripts/generate_image.sh \
+  --prompt "测试生图" \
+  --output ./image-curl-test.png \
+  --dry-run
+```
+
+确认输出中 `authorization` 为 `Bearer ***` 且 `endpoint` 指向 `https://aicode.cat` 后，再执行一次真实生图测试。
 
 ## 在 Codex 中使用
 
@@ -209,19 +254,24 @@ dry-run，只检查配置和请求体，不调用接口：
 
 ## 配置读取规则
 
-脚本会在 `CODEX_HOME`（未设置时默认为 `~/.codex`）下定位 `auth.json`，用于读取 API Key。
+生图专用 Key 的标准配置路径：
+
+```text
+~/.codex/skills/image-curl/local.env
+```
 
 `base_url` 读取顺序：
 
-1. `IMAGE_CURL_BASE_URL`
-2. 默认值 `https://aicode.cat`
+1. skill 目录 `local.env` 中的 `IMAGE_CURL_BASE_URL`
+2. 环境变量 `IMAGE_CURL_BASE_URL`
+3. 默认值 `https://aicode.cat`
 
 API Key 读取顺序：
 
-1. `IMAGE_CURL_API_KEY`
-2. `OPENAI_API_KEY`
-3. `CLIPROXY_API_KEY`
-4. `auth.json` 中的 `OPENAI_API_KEY`、`OPENAI_API_TOKEN`、`api_key`、`token` 或 `openai_api_key`
+1. skill 目录 `local.env` 中的 `IMAGE_CURL_API_KEY`（**推荐，生图专用 Key 只放这里**）
+2. 命令行 `--api-key`（仅临时覆盖）
+3. 环境变量 `IMAGE_CURL_API_KEY` / `OPENAI_API_KEY` / `CLIPROXY_API_KEY`（仅兜底，不推荐用于生图专用 Key）
+4. `~/.codex/auth.json`（仅兜底，**不要**把生图专用 Key 写进去）
 
 也可以显式覆盖：
 
@@ -315,6 +365,7 @@ curl -sS --fail-with-body -X POST "https://aicode.cat/v1/images/edits" \
 skill_src/
   image-curl/
     SKILL.md
+    local.env.example
     agents/
       openai.yaml
     scripts/

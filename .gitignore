@@ -7,3 +7,5 @@
 cat.txt
 .DS_Store
 .omx/
+local.env
+**/local.env

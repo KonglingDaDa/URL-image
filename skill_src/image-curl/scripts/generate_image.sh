@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+skill_dir="$(cd "$script_dir/.." && pwd)"
+local_env="$skill_dir/local.env"
+if [[ -f "$local_env" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$local_env"
+  set +a
+fi
+
 usage() {
   cat <<'USAGE'
 用法：
@@ -19,7 +29,7 @@ usage() {
   --count N, --n N      单次 API 请求生成的图片数量，默认 1，最大 10
   --metadata FILE       保存响应 metadata，省略 b64_json
   --base-url URL        覆盖默认 base URL，默认：https://aicode.cat
-  --api-key KEY         覆盖本机 Codex 鉴权 API Key
+  --api-key KEY         临时覆盖 API Key；常规请写入 skill 目录 local.env
   --timeout SECONDS     curl 超时时间，默认 300
   --overwrite           允许覆盖已有输出文件
   --dry-run             dry-run 模式，打印脱敏后的请求信息，不调用接口
@@ -267,7 +277,7 @@ config_path="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["confi
 auth_path="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["auth_path"])' "$config_json")"
 
 [[ -n "$base_url" ]] || die "无法从 $config_path 读取 base URL，请传入 --base-url 或设置 IMAGE_CURL_BASE_URL。"
-[[ -n "$api_key" ]] || die "无法从 $auth_path 读取 API Key，请传入 --api-key 或设置 IMAGE_CURL_API_KEY。"
+[[ -n "$api_key" ]] || die "未找到 API Key。请在 $skill_dir/local.env 中设置 IMAGE_CURL_API_KEY，或传入 --api-key。"
 
 route_base="${base_url%/}"
 if [[ "$route_base" == */v1 ]]; then

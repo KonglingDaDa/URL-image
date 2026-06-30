@@ -1,7 +1,7 @@
 interface:
   display_name: "Image Curl（curl 生图）"
   short_description: "通过 curl 生成或编辑本地图片"
-  default_prompt: "当用户要求生成或编辑图片时，调用 $image-curl 并执行其脚本，通过已配置的 Codex 图片接口用 curl 产出本地图片文件。"
+  default_prompt: "当用户要求生成或编辑图片时，调用 $image-curl 并执行其脚本。生图专用 API Key 只写入 skill 目录 local.env，不要写入 ~/.codex/auth.json 或 ~/.claude/settings.json。"
 
 policy:
   allow_implicit_invocation: true
