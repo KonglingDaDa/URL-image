@@ -330,4 +330,5 @@ skill_src/
 README.md
 AGENTS.md
 LICENSE
+LICENSE.zh-CN
 ```
