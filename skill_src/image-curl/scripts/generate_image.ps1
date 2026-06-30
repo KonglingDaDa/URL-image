@@ -119,7 +119,7 @@ $config = Get-ImageCurlConfig -OverrideBaseUrl $argsObj.base_url -OverrideApiKey
 if (-not $config.BaseUrl) {
     Write-ImageCurlError '无法解析 base URL，请传入 --base-url 或设置 IMAGE_CURL_BASE_URL。'
 }
-if (-not $config.ApiKey) {
+if (-not $argsObj.dry_run -and -not $config.ApiKey) {
     Write-ImageCurlError "未找到 API Key。请在 $SkillDir/local.env 中设置 IMAGE_CURL_API_KEY，或传入 --api-key。"
 }
 

@@ -137,7 +137,7 @@ $config = Get-ImageCurlConfig -OverrideBaseUrl $argsObj.base_url -OverrideApiKey
 if (-not $config.BaseUrl) {
     Write-ImageCurlError '无法解析 base URL，请传入 --base-url 或设置 IMAGE_CURL_BASE_URL。'
 }
-if (-not $config.ApiKey) {
+if (-not $argsObj.dry_run -and -not $config.ApiKey) {
     Write-ImageCurlError "未找到 API Key。请在 $SkillDir/local.env 中设置 IMAGE_CURL_API_KEY，或传入 --api-key。"
 }
 
@@ -173,7 +173,10 @@ if ($argsObj.dry_run) {
 }
 
 $tempFile = [System.IO.Path]::GetTempFileName()
+$promptTmp = [System.IO.Path]::GetTempFileName()
 try {
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($promptTmp, $prompt, $utf8NoBom)
     $curlArgs = @(
         '-sS', '--fail-with-body', '-X', 'POST', $endpoint,
         '-H', "Authorization: Bearer $($config.ApiKey)",
@@ -181,7 +184,7 @@ try {
         '-H', 'Pragma: no-cache',
         '--max-time', $argsObj.timeout,
         '--form-string', "model=$($argsObj.model)",
-        '--form-string', "prompt=$prompt",
+        '-F', "prompt=<$promptTmp",
         '--form-string', "size=$size",
         '--form-string', "quality=$($argsObj.quality)",
         '--form-string', "output_format=$format",
@@ -219,5 +222,8 @@ try {
 } finally {
     if (Test-Path -LiteralPath $tempFile) {
         Remove-Item -LiteralPath $tempFile -Force
+    }
+    if (Test-Path -LiteralPath $promptTmp) {
+        Remove-Item -LiteralPath $promptTmp -Force
     }
 }

@@ -1014,17 +1014,18 @@ function Save-ThreadState {
         [string[]]$LastOutput = @()
     )
 
-    $args = @('save', '--thread-id', $ThreadId)
-    if ($ActiveInput.Count -gt 0) {
-        $args += @('--active-input') + $ActiveInput
-    }
-    if ($LastOutput.Count -gt 0) {
-        $args += @('--last-output') + $LastOutput
-    }
     if ($ActiveInput.Count -eq 0 -and $LastOutput.Count -eq 0) {
         return
     }
-    Invoke-ThreadState -Arguments $args | Out-Null
+
+    # Always use request JSON file: PowerShell strips '#' when passing args to native python.exe.
+    $payload = [ordered]@{
+        thread_id    = $ThreadId
+        active_input = @([string[]]@($ActiveInput | Where-Object { $_ }))
+        last_output  = @([string[]]@($LastOutput | Where-Object { $_ }))
+    }
+    $stdinJson = ($payload | ConvertTo-Json -Compress -Depth 5)
+    Invoke-ThreadState -Arguments @('save') -StdinJson $stdinJson | Out-Null
 }
 
 function Get-SavedPathsFromResult {

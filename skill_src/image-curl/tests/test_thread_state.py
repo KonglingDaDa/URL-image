@@ -69,6 +69,35 @@ class ThreadStateResolveTests(unittest.TestCase):
             self.assertEqual(paths[0], str(first.resolve()).replace("\\", "/"))
             self.assertEqual(paths[1], str(second.resolve()).replace("\\", "/"))
 
+    def test_save_request_file_preserves_hash_in_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            thread_dir = Path(tmpdir) / "generated_images" / "manual"
+            thread_dir.mkdir(parents=True)
+            hashed = thread_dir / "img#2.png"
+            hashed.write_bytes(b"")
+            request = {
+                "thread_id": "manual",
+                "active_input": [],
+                "last_output": [str(hashed.resolve()).replace("\\", "/")],
+            }
+            request_file = Path(tmpdir) / "save-request.json"
+            request_file.write_text(json.dumps(request, ensure_ascii=False), encoding="utf-8")
+
+            proc = run_thread_state(
+                "save",
+                "--request-file",
+                str(request_file),
+                env={"CODEX_HOME": tmpdir},
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+
+            state_path = thread_dir / "last_output_set.json"
+            self.assertTrue(state_path.is_file(), proc.stderr)
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(len(state["images"]), 1)
+            self.assertIn("#", state["images"][0])
+            self.assertTrue(state["images"][0].endswith("img#2.png"))
+
     def test_rollout_placeholder_fails_for_manual(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             proc = run_thread_state(

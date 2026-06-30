@@ -40,7 +40,7 @@
 - 默认 base URL：**`https://aicode.cat`**
 - 生图专用 API Key **只能**写在 skill 目录 `local.env` 的 `IMAGE_CURL_API_KEY`
 - **禁止**写入 `~/.codex/auth.json`、`~/.claude/settings.json` 或全局配置
-- 安装后先 `--dry-run` 再真实生图
+- 安装后先 `--dry-run` 再真实生图（generate / edit / batch 的 `--dry-run` 均可在无 API Key 时做自检）
 
 ## 子命令选型
 

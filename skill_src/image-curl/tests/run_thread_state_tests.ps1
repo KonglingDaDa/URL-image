@@ -123,6 +123,32 @@ Assert-Test 'Resolve-ImageRefs --image-set last-output returns saved paths' {
     }
 }
 
+Assert-Test 'Save-ThreadState preserves hash in path via request JSON' {
+    $codexHome = New-TempCodexHome
+    try {
+        $threadDir = Join-Path (Join-Path $codexHome 'generated_images') 'manual'
+        New-Item -ItemType Directory -Path $threadDir -Force | Out-Null
+        $hashed = Join-Path $threadDir 'img#2.png'
+        Write-MinimalPng -Path $hashed
+
+        $env:CODEX_HOME = $codexHome
+        Remove-Item Env:CODEX_THREAD_ID -ErrorAction SilentlyContinue
+        Remove-Item Env:CODEX_SESSION_ID -ErrorAction SilentlyContinue
+
+        $fullPath = [System.IO.Path]::GetFullPath($hashed)
+        Save-ThreadState -ThreadId 'manual' -LastOutput @([string]$fullPath)
+
+        $statePath = Join-Path $threadDir 'last_output_set.json'
+        if (-not (Test-Path -LiteralPath $statePath)) { throw 'last_output_set.json not written' }
+        $state = Get-Content -LiteralPath $statePath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($state.images.Count -ne 1) { throw "expected 1 saved path, got $($state.images.Count)" }
+        if ($state.images[0] -notmatch '#') { throw "hash stripped from path: $($state.images[0])" }
+        if (-not $state.images[0].EndsWith('img#2.png')) { throw "unexpected path: $($state.images[0])" }
+    } finally {
+        Remove-Item -LiteralPath $codexHome -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 if ($failures -gt 0) {
     Write-Host ""
     Write-Error "$failures/$total thread state tests failed."

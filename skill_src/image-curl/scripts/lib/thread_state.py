@@ -686,16 +686,53 @@ def cmd_resolve(args: argparse.Namespace) -> int:
     return 0
 
 
+def load_save_request_payload(args: argparse.Namespace) -> dict[str, object]:
+    if args.request_file:
+        path = Path(args.request_file).expanduser()
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            fail(f"无法读取请求 JSON 文件 {path}：{exc}")
+    elif args.stdin:
+        try:
+            payload = json.load(sys.stdin)
+        except json.JSONDecodeError as exc:
+            fail(f"无法解析 stdin JSON：{exc}")
+    else:
+        return {
+            "thread_id": args.thread_id,
+            "active_input": list(args.active_input or []),
+            "last_output": list(args.last_output or []),
+        }
+
+    if not isinstance(payload, dict):
+        fail("save 请求 JSON 须为对象。")
+    return payload
+
+
 def cmd_save(args: argparse.Namespace) -> int:
-    thread_id = effective_thread_id(args.thread_id)
-    if args.active_input:
-        save_active_image_set(thread_id, [Path(path) for path in args.active_input])
-    if args.last_output:
-        save_last_output_set(thread_id, [Path(path) for path in args.last_output])
+    if args.request_file or args.stdin:
+        payload = load_save_request_payload(args)
+        thread_id = effective_thread_id(str(payload.get("thread_id") or args.thread_id or ""))
+        active_input = payload.get("active_input") or []
+        last_output = payload.get("last_output") or []
+        if not isinstance(active_input, list) or not isinstance(last_output, list):
+            fail("save 请求 JSON 中 active_input / last_output 须为数组。")
+        active_paths = [str(item) for item in active_input]
+        last_paths = [str(item) for item in last_output]
+    else:
+        thread_id = effective_thread_id(args.thread_id)
+        active_paths = [str(path) for path in args.active_input]
+        last_paths = [str(path) for path in args.last_output]
+
+    if active_paths:
+        save_active_image_set(thread_id, [Path(path) for path in active_paths])
+    if last_paths:
+        save_last_output_set(thread_id, [Path(path) for path in last_paths])
     result = {
         "thread_id": thread_id,
-        "active_saved": bool(args.active_input),
-        "last_output_saved": bool(args.last_output),
+        "active_saved": bool(active_paths),
+        "last_output_saved": bool(last_paths),
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
@@ -730,6 +767,16 @@ def build_parser() -> argparse.ArgumentParser:
     save_parser.add_argument("--thread-id", default=None, help="thread id (default: env or manual)")
     save_parser.add_argument("--active-input", nargs="*", default=[], help="paths for active_image_set.json")
     save_parser.add_argument("--last-output", nargs="*", default=[], help="paths for last_output_set.json")
+    save_parser.add_argument(
+        "--stdin",
+        action="store_true",
+        help="read {thread_id, active_input, last_output} JSON from stdin (avoids shell # truncation)",
+    )
+    save_parser.add_argument(
+        "--request-file",
+        default=None,
+        help="read {thread_id, active_input, last_output} JSON from file (Windows-friendly)",
+    )
     save_parser.set_defaults(func=cmd_save)
 
     return parser

@@ -148,7 +148,9 @@ base_url="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["base_url
 api_key="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["api_key"])' "$config_json")"
 
 [[ -n "$base_url" ]] || die "无法解析 base URL，请传入 --base-url 或设置 IMAGE_CURL_BASE_URL。"
-[[ -n "$api_key" ]] || die "未找到 API Key。请在 $skill_dir/local.env 中设置 IMAGE_CURL_API_KEY，或传入 --api-key。"
+if [[ "$dry_run" -eq 0 ]]; then
+  [[ -n "$api_key" ]] || die "未找到 API Key。请在 $skill_dir/local.env 中设置 IMAGE_CURL_API_KEY，或传入 --api-key。"
+fi
 
 endpoint="$(get_image_endpoint "$base_url" "generations")"
 

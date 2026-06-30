@@ -342,6 +342,8 @@ if [[ "$dry_run" -eq 1 ]]; then
       cat "$batch_tmp_dir/preview-${index}.json"
     elif [[ -f "$batch_tmp_dir/error-${index}.txt" ]]; then
       failures+=("$(<"$batch_tmp_dir/error-${index}.txt")")
+    else
+      failures+=("job ${index} failed: 未产生结果文件（worker 异常退出）")
     fi
   done
   if ((${#failures[@]} > 0)); then
@@ -373,7 +375,6 @@ for job_json in "${job_lines[@]}"; do
   (
     set +e
     run_batch_job "$index" "$job_json"
-    exit 0
   ) &
   pids+=($!)
 done
@@ -406,6 +407,8 @@ elif data.get("saved_file"):
     print(data["saved_file"])
 PY
 )
+  else
+    failures+=("job ${job_index} failed: 未产生结果文件（worker 异常退出）")
   fi
 done
 
