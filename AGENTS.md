@@ -4,7 +4,7 @@
 
 本仓库打包了一个名为 `image-curl` 的 Codex 技能。
 
-- `skill_src/image-curl/SKILL.md`：skill 元数据、触发规则、默认配置、工作流程与用户示例。
+- `skill_src/image-curl/SKILL.md`：skill metadata、触发规则、默认配置、工作流程与用户示例。
 - `skill_src/image-curl/scripts/generate_image.sh`：面向 `/v1/images/generations` 的文生图实现。
 - `skill_src/image-curl/scripts/edit_image.sh`：面向 `/v1/images/edits` 的图生图实现。
 - `skill_src/image-curl/agents/openai.yaml`：技能展示信息与隐式调用策略。
