@@ -17,12 +17,12 @@ usage() {
                         jpeg/webp 输出压缩级别，0-100
   --moderation VALUE    默认：auto
   --count N, --n N      单次 API 请求生成的图片数量，默认 1，最大 10
-  --metadata FILE       保存响应元数据，省略 b64_json
-  --base-url URL        覆盖默认接口地址，默认：https://aicode.cat
-  --api-key KEY         覆盖本机 Codex 鉴权 API 密钥
+  --metadata FILE       保存响应 metadata，省略 b64_json
+  --base-url URL        覆盖默认 base URL，默认：https://aicode.cat
+  --api-key KEY         覆盖本机 Codex 鉴权 API Key
   --timeout SECONDS     curl 超时时间，默认 300
   --overwrite           允许覆盖已有输出文件
-  --dry-run             试运行，打印脱敏后的请求信息，不调用接口
+  --dry-run             dry-run 模式，打印脱敏后的请求信息，不调用接口
   -h, --help            显示此帮助
 USAGE
 }
@@ -275,8 +275,8 @@ api_key="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["api_key"]
 config_path="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["config_path"])' "$config_json")"
 auth_path="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["auth_path"])' "$config_json")"
 
-[[ -n "$base_url" ]] || die "无法从 $config_path 读取接口地址，请传入 --base-url 或设置 IMAGE_CURL_BASE_URL。"
-[[ -n "$api_key" ]] || die "无法从 $auth_path 读取 API 密钥，请传入 --api-key 或设置 IMAGE_CURL_API_KEY。"
+[[ -n "$base_url" ]] || die "无法从 $config_path 读取 base URL，请传入 --base-url 或设置 IMAGE_CURL_BASE_URL。"
+[[ -n "$api_key" ]] || die "无法从 $auth_path 读取 API Key，请传入 --api-key 或设置 IMAGE_CURL_API_KEY。"
 
 route_base="${base_url%/}"
 if [[ "$route_base" == */v1 ]]; then
