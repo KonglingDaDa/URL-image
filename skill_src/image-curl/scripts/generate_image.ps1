@@ -8,12 +8,17 @@ Import-ImageCurlLocalEnv -SkillDir $SkillDir
 function Show-GenerateUsage {
     @'
 用法：
-  generate_image.ps1 --prompt 文本 --output 文件 [选项]
-  generate_image.ps1 --prompt-file 文件 --output 文件 [选项]
+  generate_image.ps1 --prompt 文本 (--output 文件 | --output-dir 目录 [--name 前缀]) [选项]
+  generate_image.ps1 --prompt-file 文件 (--output 文件 | --output-dir 目录 [--name 前缀]) [选项]
 
 选项：
+  --output FILE         输出文件路径（优先于 --output-dir/--name）
+  --output-dir DIR      输出目录；与 --name 组合生成「前缀-随机后缀」文件名
+  --name PREFIX         可读文件名前缀，默认 generated；未指定 --output-dir 时写入
+                        ${CODEX_HOME:-~/.codex}/generated_images/<thread|manual>/
   --model NAME          图片模型，默认：gpt-image-2
-  --size SIZE           auto 或 宽x高；边长须为 16 的倍数，最长边 <=3840，宽高比 <=3:1
+  --size SIZE           auto、宽x高、宽:高 或 tier 简写（如 16:9、9:16@1k、2k、4k）
+                        解析后须满足：边长为 16 的倍数，最长边 <=3840，宽高比 <=3:1
   --quality VALUE       默认：auto
   --format FORMAT       png、jpeg 或 webp，默认：png
   --output-compression N
@@ -37,12 +42,20 @@ if ($argsObj.help) {
     exit 0
 }
 
-if (-not $argsObj.output) { Write-ImageCurlError '必须提供 --output。' }
+if ($argsObj.images.Count -gt 0) {
+    Write-Warning 'generate 不支持 --image 输入；请使用 edit_image 进行改图。'
+}
+
+if (-not $argsObj.output -and -not $argsObj.output_dir -and -not $argsObj.name) {
+    Write-ImageCurlError '必须提供 --output、--output-dir 或 --name 至少其一。'
+}
 if (-not $argsObj.model) { Write-ImageCurlError '--model 不能为空。' }
 if (-not $argsObj.size) { Write-ImageCurlError '--size 不能为空。' }
 if (-not $argsObj.format) { Write-ImageCurlError '--format 不能为空。' }
 
-$size = $argsObj.size.ToLowerInvariant()
+$requestedSize = $argsObj.size
+$resolvedSize = Resolve-ImageSize -Spec $requestedSize
+$size = $resolvedSize.ApiSize.ToLowerInvariant()
 Test-ImageSize -Size $size
 
 $format = $argsObj.format.ToLowerInvariant()
@@ -80,8 +93,10 @@ if ($argsObj.prompt_file) {
 }
 $prompt = $prompt.Trim()
 if (-not $prompt) { Write-ImageCurlError '必须提供 --prompt 或 --prompt-file。' }
+$prompt = Add-PromptSizeConstraint -Prompt $prompt -RawSpec $requestedSize -ApiSize $size
 
-$output = Resolve-FullPath $argsObj.output
+$output = Resolve-OutputPath -Output $argsObj.output -OutputDir $argsObj.output_dir -Name $argsObj.name -Format $format
+$output = Resolve-FullPath $output
 $outputDir = Split-Path -Parent $output
 if ($outputDir -and -not (Test-Path -LiteralPath $outputDir)) {
     New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
@@ -122,14 +137,18 @@ if ($argsObj.background.Trim()) { $payload.background = $argsObj.background.Trim
 if ($argsObj.output_compression) { $payload.output_compression = [int]$argsObj.output_compression }
 
 if ($argsObj.dry_run) {
-    [pscustomobject]@{
+    $dryRun = [ordered]@{
         endpoint      = $endpoint
         authorization = 'Bearer ***'
         payload       = [pscustomobject]$payload
         output        = $output
         count         = $count
         metadata      = if ($metadata) { $metadata } else { $null }
-    } | ConvertTo-ImageCurlJson -Depth 10
+    }
+    if ($resolvedSize.SizeNote) {
+        $dryRun['size_note'] = $resolvedSize.SizeNote
+    }
+    [pscustomobject]$dryRun | ConvertTo-ImageCurlJson -Depth 10
     exit 0
 }
 
@@ -156,6 +175,11 @@ try {
     }
     $responseJson = Get-Content -LiteralPath $tempFile -Raw -Encoding UTF8
     $result = Save-ImageCurlResponse -ResponseJson $responseJson -OutputPath $output -MetadataPath $metadata -Format $format -RequestedCount $count
+    $threadId = Get-ImageCurlThreadId
+    $savedPaths = [string[]]@(Get-SavedPathsFromResult -Result $result)
+    if ($savedPaths.Count -gt 0) {
+        Save-ThreadState -ThreadId $threadId -LastOutput $savedPaths
+    }
     ConvertTo-ImageCurlJson -InputObject $result -Depth 10 -Compress
 } finally {
     foreach ($file in @($tempFile, $bodyFile)) {

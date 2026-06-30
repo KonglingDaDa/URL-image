@@ -1,7 +1,17 @@
 interface:
   display_name: "Image Curl（curl 生图）"
   short_description: "通过 curl 生成或编辑本地图片"
-  default_prompt: "当用户要求生成或编辑图片时，调用 $image-curl 并执行其脚本。生图专用 API Key 只写入 skill 目录 local.env，不要写入 ~/.codex/auth.json 或 ~/.claude/settings.json。"
+  default_prompt: >
+    当用户要求生成或编辑图片并得到本地文件时，必须调用 $image-curl 并执行其脚本，不得跳过脚本直接作答。
+    默认 base URL 为 https://aicode.cat；生图专用 API Key 只写入 skill 目录 local.env，禁止写入
+    ~/.codex/auth.json 或 ~/.claude/settings.json。
+    Windows 用 image-curl.ps1 / generate_image.ps1 / edit_image.ps1；macOS/Linux 用 .sh 对应脚本。
+    统一入口子命令：generate（文生图）、edit（图生图）、generate-batch（JSONL 批量）。
+    输出可用 --output、--output-dir、--name；未指定时默认写入
+    ~/.codex/generated_images/<thread|manual>/。
+    尺寸支持 16:9、9:16@2k、2k 等简写。edit 复用历史图须显式 --image 占位符（如 [Last Output]、[Image #N]）
+    或 --image-set（active、last-output、latest-turn 等）；支持 --mask 与 --input-fidelity。
+    模型需要看到真实图片时用 edit，不要用 generate。
 
 policy:
   allow_implicit_invocation: true

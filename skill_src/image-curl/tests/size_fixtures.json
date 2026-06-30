@@ -1,0 +1,56 @@
+[
+  {
+    "input": "9:16",
+    "api_size": "2160x3840",
+    "size_note": "normalized image size 9:16 -> 2160x3840",
+    "is_explicit_dimension": false
+  },
+  {
+    "input": "9:16@1k",
+    "api_size": "1008x1792",
+    "size_note": "normalized image size 9:16@1k -> 1008x1792",
+    "is_explicit_dimension": false
+  },
+  {
+    "input": "16:9",
+    "api_size": "3840x2160",
+    "size_note": "normalized image size 16:9 -> 3840x2160",
+    "is_explicit_dimension": false
+  },
+  {
+    "input": "1000x1800",
+    "api_size": "1000x1800",
+    "size_note": null,
+    "is_explicit_dimension": true
+  },
+  {
+    "input": "auto",
+    "api_size": "auto",
+    "size_note": null,
+    "is_explicit_dimension": false
+  },
+  {
+    "input": "1024x1024",
+    "api_size": "1024x1024",
+    "size_note": null,
+    "is_explicit_dimension": true
+  },
+  {
+    "input": "9:16@2k",
+    "api_size": "2016x3584",
+    "size_note": "normalized image size 9:16@2k -> 2016x3584",
+    "is_explicit_dimension": false
+  },
+  {
+    "input": "1k@16:9",
+    "api_size": "1792x1008",
+    "size_note": "normalized image size 1k@16:9 -> 1792x1008",
+    "is_explicit_dimension": false
+  },
+  {
+    "input": "2k",
+    "api_size": "2048x2048",
+    "size_note": "normalized image size 2k -> 2048x2048",
+    "is_explicit_dimension": false
+  }
+]
