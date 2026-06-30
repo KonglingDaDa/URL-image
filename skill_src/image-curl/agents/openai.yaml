@@ -1,5 +1,5 @@
 interface:
-  display_name: "Image Curl 生图"
+  display_name: "Image Curl（curl 生图）"
   short_description: "通过 curl 生成或编辑本地图片"
   default_prompt: "当用户要求生成或编辑图片时，调用 $image-curl 并执行其脚本，通过已配置的 Codex 图片接口用 curl 产出本地图片文件。"
 
