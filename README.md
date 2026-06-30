@@ -31,13 +31,17 @@
 
 本 skill 的脚本是 Bash 程序，依赖以下三个本机命令：
 
-| 依赖 | 用途 |
-|---|---|
-| `bash` | 运行 `generate_image.sh`、`edit_image.sh` |
-| `curl` | 调用 aicode.cat 图片 API |
-| `python3` | 解析配置、组装请求、解码 base64 图片 |
+| 平台 | 脚本 | 额外依赖 |
+|---|---|---|
+| macOS / Linux | `generate_image.sh`、`edit_image.sh` | `bash`、`curl`、`python3` |
+| Windows | `generate_image.ps1`、`edit_image.ps1` | PowerShell 5.1+、`curl.exe` |
 
-安装前先检查：
+### macOS
+
+- 使用 `.sh` 脚本，在终端里按下方安装步骤执行即可。
+- skill 安装路径：`~/.codex/skills/image-curl/`
+
+安装前检查：
 
 ```bash
 bash --version
@@ -45,17 +49,18 @@ curl --version
 python3 --version
 ```
 
-### macOS
-
-- 一般可直接使用，在终端（Terminal）里按下方安装步骤执行即可。
-- skill 安装路径：`~/.codex/skills/image-curl/`
-
 ### Windows
 
-- **不要**在 PowerShell 或 CMD 里直接运行 `.sh` 脚本。
-- 请使用 **Git Bash** 或 **WSL**，并在该环境里执行全部安装与测试命令。
-- 若 Codex 本身运行在 WSL 中，路径与命令也应使用 WSL 环境，不要混用 Windows 路径与 Linux 路径。
-- skill 安装路径仍为：`~/.codex/skills/image-curl/`（对应当前 Bash 环境的主目录）
+- **推荐**直接在 **PowerShell** 里运行 `.ps1` 脚本，无需 Git Bash / WSL。
+- 也可继续使用 `.sh` 脚本，但需 Git Bash 或 WSL。
+- skill 安装路径：`%USERPROFILE%\.codex\skills\image-curl\`
+
+安装前检查：
+
+```powershell
+$PSVersionTable.PSVersion
+curl.exe --version
+```
 
 ## 安装
 
@@ -70,6 +75,13 @@ chmod +x ~/.codex/skills/image-curl/scripts/edit_image.sh
 
 cp ~/.codex/skills/image-curl/local.env.example ~/.codex/skills/image-curl/local.env
 chmod 600 ~/.codex/skills/image-curl/local.env
+```
+
+Windows（PowerShell）额外无需 `chmod`；安装后直接用：
+
+```powershell
+$skill = Join-Path $env:USERPROFILE '.codex\skills\image-curl'
+Copy-Item (Join-Path $skill 'local.env.example') (Join-Path $skill 'local.env')
 ```
 
 如果你使用了自定义 `CODEX_HOME`：
@@ -115,9 +127,18 @@ IMAGE_CURL_BASE_URL=https://aicode.cat
 安装完成后，用 dry-run 验证配置是否生效：
 
 ```bash
+# macOS / Linux
 ~/.codex/skills/image-curl/scripts/generate_image.sh \
   --prompt "测试生图" \
   --output ./image-curl-test.png \
+  --dry-run
+```
+
+```powershell
+# Windows PowerShell
+& "$env:USERPROFILE\.codex\skills\image-curl\scripts\generate_image.ps1" `
+  --prompt "测试生图" `
+  --output .\image-curl-test.png `
   --dry-run
 ```
 
@@ -399,8 +420,11 @@ skill_src/
     agents/
       openai.yaml
     scripts/
+      ImageCurl.Common.ps1
       generate_image.sh
+      generate_image.ps1
       edit_image.sh
+      edit_image.ps1
 README.md
 AGENTS.md
 LICENSE

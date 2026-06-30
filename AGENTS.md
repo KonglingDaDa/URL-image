@@ -30,7 +30,7 @@ cp -R ./skill_src/image-curl ~/.codex/skills/image-curl
 chmod +x ~/.codex/skills/image-curl/scripts/*.sh
 ```
 
-在 Windows 上，请通过 Git Bash 或 WSL 运行这些脚本，并保持 LF 换行。本 skill 依赖 `bash`、`curl`、`python3` 三个本机命令；跨平台说明与 Agent 排障规则见 `README.md` 的「系统要求」与 `SKILL.md` 的「运行环境与跨平台」。
+Windows 优先使用 `generate_image.ps1` / `edit_image.ps1`（PowerShell + `curl.exe`）；macOS / Linux 使用 `.sh`（`bash` + `curl` + `python3`）。跨平台说明见 `README.md` 与 `SKILL.md`。
 
 ## 代码风格与命名约定
 
