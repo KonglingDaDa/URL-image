@@ -3,32 +3,32 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage:
-  generate_image.sh --prompt TEXT --output FILE [options]
-  generate_image.sh --prompt-file FILE --output FILE [options]
+用法：
+  generate_image.sh --prompt 文本 --output 文件 [选项]
+  generate_image.sh --prompt-file 文件 --output 文件 [选项]
 
-Options:
-  --model NAME          Image model. Default: gpt-image-2
-  --size SIZE           auto or WIDTHxHEIGHT. Edges multiple of 16, max edge 3840, ratio <= 3:1
-  --quality VALUE       Default: auto
-  --format FORMAT       png, jpeg, or webp. Default: png
+选项：
+  --model NAME          图片模型，默认：gpt-image-2
+  --size SIZE           auto 或 宽x高；边长须为 16 的倍数，最长边 <=3840，宽高比 <=3:1
+  --quality VALUE       默认：auto
+  --format FORMAT       png、jpeg 或 webp，默认：png
   --output-compression N
-                        Compression level for jpeg/webp outputs, 0-100
-  --moderation VALUE    Default: auto
-  --background VALUE    Optional background value, for example transparent or auto
-  --count N, --n N      Number of images to request in one API call. Default: 1, max: 10
-  --metadata FILE       Save response metadata with b64_json omitted
-  --base-url URL        Override default base URL. Default: https://aicode.cat
-  --api-key KEY         Override local Codex auth API key
-  --timeout SECONDS     curl max time. Default: 300
-  --overwrite           Allow replacing an existing output file
-  --dry-run             Print redacted request details without calling the API
-  -h, --help            Show this help
+                        jpeg/webp 输出压缩级别，0-100
+  --moderation VALUE    默认：auto
+  --background VALUE    可选背景值，例如 transparent 或 auto
+  --count N, --n N      单次 API 请求生成的图片数量，默认 1，最大 10
+  --metadata FILE       保存响应 metadata，省略 b64_json
+  --base-url URL        覆盖默认 base URL，默认：https://aicode.cat
+  --api-key KEY         覆盖本机 Codex 鉴权 API key
+  --timeout SECONDS     curl 超时时间，默认 300
+  --overwrite           允许覆盖已有输出文件
+  --dry-run             打印脱敏后的请求信息，不调用接口
+  -h, --help            显示此帮助
 USAGE
 }
 
 die() {
-  printf 'Error: %s\n' "$*" >&2
+  printf '错误：%s\n' "$*" >&2
   exit 1
 }
 
@@ -70,62 +70,62 @@ while [[ $# -gt 0 ]]; do
     --overwrite) overwrite=1; shift ;;
     --dry-run) dry_run=1; shift ;;
     -h|--help) usage; exit 0 ;;
-    *) die "Unknown option: $1" ;;
+    *) die "未知选项：$1" ;;
   esac
 done
 
-[[ -n "$output" ]] || die "--output is required."
-[[ -n "$model" ]] || die "--model must not be empty."
-[[ -n "$size" ]] || die "--size must not be empty."
-[[ -n "$format" ]] || die "--format must not be empty."
+[[ -n "$output" ]] || die "必须提供 --output。"
+[[ -n "$model" ]] || die "--model 不能为空。"
+[[ -n "$size" ]] || die "--size 不能为空。"
+[[ -n "$format" ]] || die "--format 不能为空。"
 size="${size,,}"
 if [[ "$size" != "auto" ]]; then
-  [[ "$size" =~ ^([1-9][0-9]*)x([1-9][0-9]*)$ ]] || die "--size must be auto or WIDTHxHEIGHT, for example 1024x1024, 1344x768, 2048x1152."
+  [[ "$size" =~ ^([1-9][0-9]*)x([1-9][0-9]*)$ ]] || die "--size 须为 auto 或 宽x高，例如 1024x1024、1344x768、2048x1152。"
   width="${BASH_REMATCH[1]}"
   height="${BASH_REMATCH[2]}"
   pixel_count=$(( width * height ))
   if (( width > 3840 || height > 3840 )); then
-    die "--size '$size' is not supported by the upstream: the longest edge must be less than or equal to 3840."
+    die "--size '$size' 不受上游支持：最长边不得超过 3840。"
   fi
   if (( width % 16 != 0 || height % 16 != 0 )); then
-    die "--size '$size' is not supported by the upstream: both edges must be multiples of 16."
+    die "--size '$size' 不受上游支持：宽和高均须为 16 的倍数。"
   fi
   if (( width > height * 3 || height > width * 3 )); then
-    die "--size '$size' is not supported by the upstream: the maximum supported aspect ratio is 3:1."
+    die "--size '$size' 不受上游支持：最大宽高比为 3:1。"
   fi
   if (( pixel_count < 655360 || pixel_count > 8294400 )); then
-    die "--size '$size' is not supported by the upstream: total pixels must be between 655360 and 8294400."
+    die "--size '$size' 不受上游支持：总像素数须在 655360 至 8294400 之间。"
   fi
 fi
-[[ "$format" =~ ^(png|jpeg|jpg|webp)$ ]] || die "--format must be png, jpeg, jpg, or webp."
+[[ "$format" =~ ^(png|jpeg|jpg|webp)$ ]] || die "--format 须为 png、jpeg、jpg 或 webp。"
 if [[ "$format" == "jpg" ]]; then
   format="jpeg"
 fi
 if [[ -n "$output_compression" ]]; then
-  [[ "$output_compression" =~ ^[0-9]+$ && "$output_compression" -ge 0 && "$output_compression" -le 100 ]] || die "--output-compression must be an integer between 0 and 100."
-  [[ "$format" == "jpeg" || "$format" == "webp" ]] || die "--output-compression is only supported for jpeg or webp output."
+  [[ "$output_compression" =~ ^[0-9]+$ && "$output_compression" -ge 0 && "$output_compression" -le 100 ]] || die "--output-compression 须为 0 至 100 之间的整数。"
+  [[ "$format" == "jpeg" || "$format" == "webp" ]] || die "--output-compression 仅适用于 jpeg 或 webp 输出。"
 fi
-[[ "$timeout" =~ ^[0-9]+$ && "$timeout" -gt 0 ]] || die "--timeout must be a positive integer."
-[[ "$count" =~ ^[0-9]+$ && "$count" -ge 1 && "$count" -le 10 ]] || die "--count/--n must be an integer between 1 and 10."
+[[ "$timeout" =~ ^[0-9]+$ && "$timeout" -gt 0 ]] || die "--timeout 须为正整数。"
+[[ "$count" =~ ^[0-9]+$ && "$count" -ge 1 && "$count" -le 10 ]] || die "--count/--n 须为 1 至 10 之间的整数。"
 
 if [[ -n "$prompt" && -n "$prompt_file" ]]; then
-  die "Provide either --prompt or --prompt-file, not both."
+  die "请只提供 --prompt 或 --prompt-file 其中之一，不可同时使用。"
 fi
 
 if [[ -n "$prompt_file" ]]; then
-  [[ -f "$prompt_file" ]] || die "Prompt file not found: $prompt_file"
+  [[ -f "$prompt_file" ]] || die "未找到提示词文件：$prompt_file"
   prompt="$(<"$prompt_file")"
 fi
 
 prompt="${prompt#"${prompt%%[![:space:]]*}"}"
 prompt="${prompt%"${prompt##*[![:space:]]}"}"
-[[ -n "$prompt" ]] || die "--prompt or --prompt-file is required."
+[[ -n "$prompt" ]] || die "必须提供 --prompt 或 --prompt-file。"
 
 output="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$output")"
 output_dir="$(dirname "$output")"
 [[ -d "$output_dir" ]] || mkdir -p "$output_dir"
 if [[ "$count" -eq 1 && -e "$output" && "$overwrite" -ne 1 ]]; then
-  die "Output already exists: $output (use --overwrite to replace it)"
+  die "输出文件已存在：$output（如需覆盖请加 --overwrite）"
 fi
 
 if [[ -n "$metadata" ]]; then
@@ -152,7 +152,7 @@ def targets_for(output_path, output_format, count):
 if not overwrite:
     conflicts = [str(path) for path in targets_for(output, output_format, count) if path.exists()]
     if conflicts:
-        raise SystemExit("Output already exists: " + ", ".join(conflicts) + " (use --overwrite to replace)")
+        raise SystemExit("输出文件已存在：" + ", ".join(conflicts) + "（如需覆盖请加 --overwrite）")
 PY
 
 config_json="$(python3 - "$base_url" "$api_key" <<'PY'
@@ -266,8 +266,8 @@ api_key="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["api_key"]
 config_path="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["config_path"])' "$config_json")"
 auth_path="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["auth_path"])' "$config_json")"
 
-[[ -n "$base_url" ]] || die "Unable to discover base URL from $config_path. Pass --base-url or set IMAGE_CURL_BASE_URL."
-[[ -n "$api_key" ]] || die "Unable to discover API key from $auth_path. Pass --api-key or set IMAGE_CURL_API_KEY."
+[[ -n "$base_url" ]] || die "无法从 $config_path 读取 base URL，请传入 --base-url 或设置 IMAGE_CURL_BASE_URL。"
+[[ -n "$api_key" ]] || die "无法从 $auth_path 读取 API key，请传入 --api-key 或设置 IMAGE_CURL_API_KEY。"
 
 route_base="${base_url%/}"
 if [[ "$route_base" == */v1 ]]; then
@@ -348,11 +348,11 @@ requested_count = int(sys.argv[5])
 try:
     response = json.loads(response_path.read_text(encoding="utf-8"))
 except Exception as exc:
-    raise SystemExit(f"Response is not valid JSON: {exc}")
+    raise SystemExit(f"响应不是合法的 JSON：{exc}")
 
 data = response.get("data")
 if not isinstance(data, list) or not data:
-    raise SystemExit("Response JSON does not contain data[0].")
+    raise SystemExit("响应 JSON 中缺少 data[0]。")
 
 def targets_for(output_path, output_format, count):
     if count == 1:
@@ -368,11 +368,11 @@ saved_files = []
 for index, item in enumerate(data):
     b64 = item.get("b64_json") if isinstance(item, dict) else None
     if not isinstance(b64, str) or not b64:
-        raise SystemExit(f"Response JSON does not contain data[{index}].b64_json.")
+        raise SystemExit(f"响应 JSON 中缺少 data[{index}].b64_json。")
     try:
         image_bytes = base64.b64decode(b64, validate=True)
     except Exception as exc:
-        raise SystemExit(f"Invalid base64 image data at data[{index}]: {exc}")
+        raise SystemExit(f"data[{index}] 中的 base64 图片数据无效：{exc}")
 
     target = targets[index]
     target.write_bytes(image_bytes)

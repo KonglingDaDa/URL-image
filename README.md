@@ -1,23 +1,22 @@
 # URL-image
 
 <p align="center">
-  <img src="aicodecat.png" alt="AicodeCat logo">
+  <img src="aicodecat.png" alt="AicodeCat 标识">
 </p>
 
 > Codex 生图 skill：`image-curl` — 通过 `curl` 调用 OpenAI 兼容图片 API，完成文生图、图生图与图片编辑。
 
 `URL-image` 仓库打包了面向 [aicode.cat](https://aicode.cat) API 中转聚合平台的 Codex 生图 skill。它通过 `curl` 直接调用图片接口，读取本机 Codex API 凭据，并把结果保存为本地图片文件。
 
-- Built for conversational image generation through `https://aicode.cat`
-- Direct API calls: `POST /v1/images/generations`, `POST /v1/images/edits`
-- Default model: `gpt-image-2`
-- No `cpa`, no `cliproxy-image-cli`, no extra image CLI dependency
-- Uses `https://aicode.cat` as the default base URL and reads the API key from local Codex config by default
-- Saves `data[0].b64_json` as a local `png`, `jpeg`, or `webp` file
+- 面向对话式生图，默认接入 `https://aicode.cat`
+- 直接调用 `POST /v1/images/generations` 与 `POST /v1/images/edits`
+- 默认模型：`gpt-image-2`
+- 不依赖 `cpa`、`cliproxy-image-cli` 或其他额外生图 CLI
+- 默认使用 `https://aicode.cat` 作为 base URL，并从本机 Codex 配置读取 API key
+- 将响应中的 `data[0].b64_json` 解码保存为本地 `png`、`jpeg` 或 `webp` 文件
+- **用户一旦提出生图或改图需求，Codex 必须调用本 skill，不得跳过脚本直接作答**
 
-## 中文说明
-
-### 功能
+## 功能
 
 - 在 Codex 对话中通过 `$image-curl` 调用 aicode.cat 生成或编辑图片
 - 默认使用 `https://aicode.cat`，并读取本机 Codex 配置中的 API key
@@ -26,9 +25,9 @@
 - 自动解码响应里的 `data[0].b64_json`
 - 支持输出文件、metadata、覆盖保护、dry run
 
-这个 skill 支持文字生成图片和基于本地图片的图生图/编辑，不做网页搜图或 SVG 编辑。
+本 skill 支持文字生成图片和基于本地图片的图生图/编辑，不做网页搜图或 SVG 编辑。
 
-### 安装
+## 安装
 
 ```bash
 git clone https://github.com/KonglingDaDa/URL-image.git
@@ -49,7 +48,7 @@ chmod +x "$CODEX_HOME/skills/image-curl/scripts/generate_image.sh"
 chmod +x "$CODEX_HOME/skills/image-curl/scripts/edit_image.sh"
 ```
 
-### 在 Codex 中使用
+## 在 Codex 中使用
 
 显式调用：
 
@@ -63,13 +62,13 @@ $image-curl 可爱猫女
 $image-curl 生成一张横版赛博城市壁纸，保存为 ./cyber-city.png
 ```
 
-普通图片请求也可以触发这个 skill：
+普通图片请求也会触发本 skill（无需手写 `$image-curl`）：
 
 ```text
 画一只坐在窗边的橘猫，温暖自然光，保存到当前目录
 ```
 
-图生图/图片编辑：
+图生图 / 图片编辑：
 
 ```text
 $image-curl image="./photo1.png" prompt="把背景换成星空" output="./starry.png"
@@ -81,7 +80,7 @@ $image-curl image="./photo1.png" prompt="把背景换成星空" output="./starry
 $image-curl image="./photo1.png" image="./photo2.jpg" prompt="融合两张参考图，生成统一风格海报" output="./merged.png"
 ```
 
-### 调用 skill 时传参
+## 调用 skill 时传参
 
 Codex skill 没有固定的参数协议。你可以在聊天里用 `key=value` 写清楚参数，Codex 会把它们转换成脚本参数。
 
@@ -160,9 +159,9 @@ $image-curl prompt="新疆旅游宣传海报" output="./xinjiang.png" size="1280
 - 总像素数必须在 `[655360, 8294400]`
 - 例如横向长卷 4K 推荐用 `3840x1280`，不要用会被拒绝的 `4096x1024` 或 `3840x960`
 
-### 直接运行脚本
+## 直接运行脚本
 
-#### 文生图
+### 文生图
 
 ```bash
 ~/.codex/skills/image-curl/scripts/generate_image.sh \
@@ -175,7 +174,7 @@ $image-curl prompt="新疆旅游宣传海报" output="./xinjiang.png" size="1280
   --moderation auto
 ```
 
-#### 图生图/图片编辑
+### 图生图 / 图片编辑
 
 ```bash
 ~/.codex/skills/image-curl/scripts/edit_image.sh \
@@ -208,7 +207,7 @@ $image-curl prompt="新疆旅游宣传海报" output="./xinjiang.png" size="1280
   --dry-run
 ```
 
-### 配置读取规则
+## 配置读取规则
 
 默认会从本机 Codex 配置读取 API key：
 
@@ -248,7 +247,7 @@ API key 读取顺序：
 
 不要把真实 API key 提交到 Git 仓库。
 
-### 参数
+## 参数
 
 `generate_image.sh` 和 `edit_image.sh` 通用参数：
 
@@ -276,7 +275,7 @@ API key 读取顺序：
 --image FILE           输入图片路径，可重复传多个
 ```
 
-### 请求格式
+## 请求格式
 
 文生图请求形态：
 
@@ -317,7 +316,7 @@ curl -sS --fail-with-body -X POST "https://aicode.cat/v1/images/edits" \
   -F "image[]=@photo2.jpg"
 ```
 
-### 项目结构
+## 项目结构
 
 ```text
 skill_src/
@@ -329,321 +328,6 @@ skill_src/
       generate_image.sh
       edit_image.sh
 README.md
-```
-
-## English
-
-### What It Does
-
-- Lets Codex generate or edit images through `$image-curl`
-- Reuses local Codex auth, so prompts do not need API keys
-- Uses `https://aicode.cat` as the default base URL
-- Calls `curl -X POST https://aicode.cat/v1/images/generations` directly
-- Calls multipart `curl -X POST https://aicode.cat/v1/images/edits` for image-to-image edits
-- Decodes `data[0].b64_json` into a local image file
-- Supports output paths, metadata export, overwrite protection, and dry runs
-
-This skill supports text-to-image generation and local image-to-image edits. It does not handle web image search or SVG editing.
-
-### Installation
-
-```bash
-git clone https://github.com/KonglingDaDa/URL-image.git
-cd URL-image
-
-mkdir -p ~/.codex/skills
-cp -R ./skill_src/image-curl ~/.codex/skills/image-curl
-chmod +x ~/.codex/skills/image-curl/scripts/generate_image.sh
-chmod +x ~/.codex/skills/image-curl/scripts/edit_image.sh
-```
-
-If you use a custom `CODEX_HOME`:
-
-```bash
-mkdir -p "$CODEX_HOME/skills"
-cp -R ./skill_src/image-curl "$CODEX_HOME/skills/image-curl"
-chmod +x "$CODEX_HOME/skills/image-curl/scripts/generate_image.sh"
-chmod +x "$CODEX_HOME/skills/image-curl/scripts/edit_image.sh"
-```
-
-### Using It In Codex
-
-Explicit invocation:
-
-```text
-$image-curl cute catgirl
-```
-
-With an output path:
-
-```text
-$image-curl Generate a wide cyberpunk city wallpaper and save it as ./cyber-city.png
-```
-
-Plain image requests may also trigger the skill:
-
-```text
-Draw an orange cat sitting beside a window in warm natural light and save it in the current directory.
-```
-
-Image-to-image edit:
-
-```text
-$image-curl image="./photo1.png" prompt="Replace the background with a starry sky" output="./starry.png"
-```
-
-Multiple reference images:
-
-```text
-$image-curl image="./photo1.png" image="./photo2.jpg" prompt="Combine both references into one unified poster style" output="./merged.png"
-```
-
-### Passing Parameters To The Skill
-
-Codex skills do not have a strict argument protocol. You can write `key=value` arguments in chat, and Codex maps them to script flags.
-
-Common parameters:
-
-```text
-$image-curl prompt="cute catgirl" output="./catgirl.png" size="1024x1024" quality="auto" format="png"
-```
-
-Custom base URL and API key:
-
-```text
-$image-curl prompt="A cat" output="./cat.png" base_url="https://aicode.cat" api_key="<API_KEY>"
-```
-
-Natural language works too:
-
-```text
-$image-curl Draw a cute cat and save it as ./cat.png, size 1024x1024, using base_url=https://aicode.cat and api_key=<API_KEY>
-```
-
-Prefer environment variables for secrets instead of sending a real API key in chat:
-
-```text
-$image-curl Draw a cat, save it as ./cat.png, and use the default https://aicode.cat domain with IMAGE_CURL_API_KEY from the environment.
-```
-
-Common fields you can express in chat:
-
-```text
-prompt, output, size, count, n, quality, format, output_compression, moderation, background, metadata, overwrite, dry_run, base_url, api_key
-```
-
-Use `count` or `n` to request multiple images in one API call:
-
-```text
-$image-curl prompt="Four Xinjiang travel posters in different styles" output="./xinjiang-poster.png" size="1280x1920" count=4
-```
-
-This sends `n=4` to the API and saves:
-
-```text
-xinjiang-poster-1.png
-xinjiang-poster-2.png
-xinjiang-poster-3.png
-xinjiang-poster-4.png
-```
-
-The script saves every image returned in `data[]`. If an upstream accepts but ignores the `n` parameter, the output JSON includes `requested_count` and `returned_count` so the mismatch is visible.
-
-Compressed WebP output:
-
-```text
-$image-curl prompt="Two cat avatars" output="./cat.webp" size="1024x1024" format="webp" output_compression=80 count=2
-```
-
-For image-to-image edits, repeat the `image` field:
-
-```text
-$image-curl image="./photo1.png" image="./photo2.jpg" prompt="Replace the background with a starry sky" output="./edited.png"
-```
-
-`size` can be `auto` or any upstream-supported `WIDTHxHEIGHT`, for example:
-
-```text
-$image-curl prompt="Xinjiang travel poster" output="./xinjiang.png" size="1280x1920"
-```
-
-Do not force fixed-size cropping. If the user gives exact dimensions within the upstream limits, pass them through unchanged. If the user only asks for 1K, 2K, 4K, wide, or tall output, Codex should choose dimensions in that tier while preserving the requested orientation.
-
-Confirmed upstream limits:
-
-- longest edge must be less than or equal to `3840`
-- both edges must be multiples of `16`
-- maximum supported aspect ratio is `3:1`
-- total pixels must be in `[655360, 8294400]`
-- for a 4K horizontal long image, prefer `3840x1280`; avoid rejected sizes such as `4096x1024` or `3840x960`
-
-### Running The Script Directly
-
-#### Text-to-image
-
-```bash
-~/.codex/skills/image-curl/scripts/generate_image.sh \
-  --prompt "A cute fluffy cat sitting and looking at the camera, clean background, warm natural light, realistic style, high quality" \
-  --output ./cat.png \
-  --size 1024x1024 \
-  --count 1 \
-  --quality auto \
-  --format png \
-  --moderation auto
-```
-
-#### Image-to-image edit
-
-```bash
-~/.codex/skills/image-curl/scripts/edit_image.sh \
-  --image ./photo1.png \
-  --image ./photo2.jpg \
-  --prompt "Replace the background with a starry sky while preserving the subject details" \
-  --output ./edited.png \
-  --size 1024x1024 \
-  --count 1 \
-  --quality auto \
-  --format png \
-  --moderation auto
-```
-
-Save metadata:
-
-```bash
-~/.codex/skills/image-curl/scripts/generate_image.sh \
-  --prompt "A cute catgirl avatar in Japanese illustration style" \
-  --output ./catgirl.png \
-  --metadata ./catgirl.metadata.json
-```
-
-Validate configuration and payload without calling the API:
-
-```bash
-~/.codex/skills/image-curl/scripts/generate_image.sh \
-  --prompt "A cat" \
-  --output ./cat.png \
-  --dry-run
-```
-
-### Configuration Discovery
-
-By default, the script reads:
-
-```text
-~/.codex/config.toml
-~/.codex/auth.json
-```
-
-When `CODEX_HOME` is set, it reads:
-
-```text
-$CODEX_HOME/config.toml
-$CODEX_HOME/auth.json
-```
-
-Base URL lookup order:
-
-1. `IMAGE_CURL_BASE_URL`
-2. default value `https://aicode.cat`
-
-API key lookup order:
-
-1. `IMAGE_CURL_API_KEY`
-2. `OPENAI_API_KEY`
-3. `CLIPROXY_API_KEY`
-4. `OPENAI_API_KEY`, `OPENAI_API_TOKEN`, `api_key`, `token`, or `openai_api_key` in `auth.json`
-
-You can also override both explicitly:
-
-```bash
-~/.codex/skills/image-curl/scripts/generate_image.sh \
-  --base-url https://aicode.cat \
-  --api-key "$OPENAI_API_KEY" \
-  --prompt "A cat" \
-  --output ./cat.png
-```
-
-Do not commit real API keys to the repository.
-
-### Options
-
-Shared options for `generate_image.sh` and `edit_image.sh`:
-
-```text
---prompt TEXT          image prompt
---prompt-file FILE     read prompt from file
---output FILE          output image path, required
---model NAME           default: gpt-image-2
---size SIZE            auto or any upstream-supported WIDTHxHEIGHT; edges multiple of 16, longest edge <=3840, aspect ratio <=3:1, total pixels in [655360,8294400]
---count N, --n N       number of images returned by one API request, default 1, max 10
---quality VALUE        default: auto
---format FORMAT        png, jpeg, webp
---output-compression N jpeg/webp output compression level, 0-100
---moderation VALUE     default: auto
---background VALUE     optional, for example transparent or auto
---metadata FILE        save response metadata with b64_json omitted
---timeout SECONDS      curl timeout, default: 300
---overwrite            allow replacing an existing output file
---dry-run              print redacted request details without calling the API
-```
-
-Extra option for `edit_image.sh`:
-
-```text
---image FILE           input image path, repeat for multiple images
-```
-
-### Request Shape
-
-Text-to-image request:
-
-```bash
-curl -sS --fail-with-body -X POST "https://aicode.cat/v1/images/generations" \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -H "Cache-Control: no-store, no-cache, max-age=0" \
-  -H "Pragma: no-cache" \
-  -d '{
-    "model": "gpt-image-2",
-    "prompt": "A cat",
-    "size": "1024x1024",
-    "n": 1,
-    "quality": "auto",
-    "output_format": "png",
-    "output_compression": 80,
-    "moderation": "auto"
-  }'
-```
-
-Image-to-image edit request:
-
-```bash
-curl -sS --fail-with-body -X POST "https://aicode.cat/v1/images/edits" \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Cache-Control: no-store, no-cache, max-age=0" \
-  -H "Pragma: no-cache" \
-  -F "model=gpt-image-2" \
-  -F "prompt=Replace the background with a starry sky" \
-  -F "size=1024x1024" \
-  -F "n=1" \
-  -F "quality=auto" \
-  -F "output_format=png" \
-  -F "output_compression=80" \
-  -F "moderation=auto" \
-  -F "image[]=@photo1.png" \
-  -F "image[]=@photo2.jpg"
-```
-
-### Project Structure
-
-```text
-skill_src/
-  image-curl/
-    SKILL.md
-    agents/
-      openai.yaml
-    scripts/
-      generate_image.sh
-      edit_image.sh
-README.md
+AGENTS.md
+LICENSE
 ```

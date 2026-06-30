@@ -1,28 +1,28 @@
-# Repository Guidelines
+# 仓库协作指南
 
-## Project Structure & Module Organization
+## 项目结构与模块划分
 
-This repository packages a Codex skill named `image-curl`.
+本仓库打包了一个名为 `image-curl` 的 Codex skill。
 
-- `skill_src/image-curl/SKILL.md` contains the skill metadata, trigger guidance, defaults, workflow, and user-facing examples.
-- `skill_src/image-curl/scripts/generate_image.sh` implements text-to-image requests against `/v1/images/generations`.
-- `skill_src/image-curl/scripts/edit_image.sh` implements image-to-image requests against `/v1/images/edits`.
-- `skill_src/image-curl/agents/openai.yaml` defines the skill display metadata and implicit invocation policy.
-- `README.md` mirrors installation and usage documentation for end users.
+- `skill_src/image-curl/SKILL.md`：skill 元数据、触发规则、默认配置、工作流程与用户示例。
+- `skill_src/image-curl/scripts/generate_image.sh`：面向 `/v1/images/generations` 的文生图实现。
+- `skill_src/image-curl/scripts/edit_image.sh`：面向 `/v1/images/edits` 的图生图实现。
+- `skill_src/image-curl/agents/openai.yaml`：skill 展示信息与隐式调用策略。
+- `README.md`：面向终端用户的安装与使用说明。
 
-There is currently no dedicated test directory or build output directory. Generated images and metadata are intentionally ignored by `.gitignore`.
+当前没有独立的测试目录或构建产物目录。生成图片与 metadata 已由 `.gitignore` 排除。
 
-## Build, Test, and Development Commands
+## 构建、测试与开发命令
 
-There is no build step. Validate changes with script help and dry-run flows:
+本项目无构建步骤。请通过脚本帮助信息与 dry-run 流程验证改动：
 
 ```bash
 bash skill_src/image-curl/scripts/generate_image.sh --help
 bash skill_src/image-curl/scripts/edit_image.sh --help
-bash skill_src/image-curl/scripts/generate_image.sh --prompt "test" --output ./tmp.png --dry-run
+bash skill_src/image-curl/scripts/generate_image.sh --prompt "测试" --output ./tmp.png --dry-run
 ```
 
-Install locally for manual Codex testing:
+本地安装以便手动测试 Codex：
 
 ```bash
 mkdir -p ~/.codex/skills
@@ -30,24 +30,24 @@ cp -R ./skill_src/image-curl ~/.codex/skills/image-curl
 chmod +x ~/.codex/skills/image-curl/scripts/*.sh
 ```
 
-On Windows, run these scripts from Git Bash or WSL with LF line endings.
+在 Windows 上，请通过 Git Bash 或 WSL 运行这些脚本，并保持 LF 换行。
 
-## Coding Style & Naming Conventions
+## 代码风格与命名约定
 
-Shell scripts use Bash with `set -euo pipefail`, long `--kebab-case` flags, lowercase variable names, and small helper functions such as `usage` and `die`. Keep scripts portable: prefer POSIX-friendly shell constructs where practical, quote variables, and validate user input before network calls. Preserve LF line endings for `.sh` files.
+Shell 脚本使用 Bash，启用 `set -euo pipefail`；参数采用 `--kebab-case` 长选项，变量名小写，并辅以 `usage`、`die` 等小型辅助函数。尽量保持可移植：在可行处使用偏 POSIX 的写法，变量要加引号，网络请求前先校验用户输入。`.sh` 文件保持 LF 换行。
 
-Markdown files should use concise headings, fenced examples, and repository-relative paths. Keep English and Chinese documentation consistent when changing behavior.
+Markdown 应结构清晰、示例完整，并尽量使用仓库内相对路径。修改行为时，请同步维护中文文档的一致性。
 
-## Testing Guidelines
+## 测试指南
 
-No automated test framework is configured. For behavioral changes, run `--help` plus at least one `--dry-run` generation path. For edit behavior, add a small local sample image outside the repository or in an ignored path and test `edit_image.sh --dry-run`. Do not commit generated `.png`, `.jpg`, `.jpeg`, `.webp`, or `*.metadata.json` files.
+当前未配置自动化测试框架。行为变更后，至少执行 `--help` 与一次 `--dry-run` 文生图路径。若涉及编辑逻辑，可在仓库外或忽略路径放置小样例图片，并测试 `edit_image.sh --dry-run`。不要提交生成的 `.png`、`.jpg`、`.jpeg`、`.webp` 或 `*.metadata.json` 文件。
 
-## Commit & Pull Request Guidelines
+## 提交与 Pull Request 规范
 
-The existing history uses short imperative commit subjects, for example `Add output compression option` and `Validate full GPT image size constraints`. Follow that style: start with a verb, keep the subject specific, and avoid trailing punctuation.
+现有历史多采用简短祈使句提交说明，例如 `Add output compression option`、`Validate full GPT image size constraints`。请沿用这一风格：以动词开头，主题具体，句末不加标点。
 
-Pull requests should include a brief summary, changed script or documentation paths, manual validation commands, and any API compatibility notes. Link related issues when available. Include screenshots only when documenting generated visual output.
+Pull Request 应包含简要说明、变更的脚本或文档路径、手动验证命令，以及必要的 API 兼容性说明。如有相关 issue 请附上链接。仅在记录可视化输出时附带截图。
 
-## Security & Configuration Tips
+## 安全与配置提示
 
-Never commit API keys, tokens, local Codex config, or real `auth.json` data. Prefer environment variables such as `IMAGE_CURL_API_KEY` and `IMAGE_CURL_BASE_URL` for local testing. Keep error output useful, but avoid logging full bearer tokens or base64 image payloads.
+切勿提交 API key、token、本机 Codex 配置或真实 `auth.json` 数据。本地测试优先使用 `IMAGE_CURL_API_KEY`、`IMAGE_CURL_BASE_URL` 等环境变量。错误信息应便于排查，但不要记录完整 bearer token 或 base64 图片内容。

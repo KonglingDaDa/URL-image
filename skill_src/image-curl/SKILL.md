@@ -1,77 +1,77 @@
 ---
 name: image-curl
-description: Always invoke this skill when the user asks to draw, generate, create, edit, transform, or do image-to-image work as a local bitmap file, including generic Chinese requests such as "画一张图", "生成一张海报", "做一张插画", or "把这张图的背景换成星空". Do not answer image-generation requests without running this skill. This skill calls OpenAI-compatible `/v1/images/generations` and `/v1/images/edits` endpoints directly with curl, using `https://aicode.cat` by default and reading the API key from environment variables or local Codex auth instead of using cpa or cliproxy CLI commands.
+description: 只要用户提出绘制、生成、创作、编辑、变换图片，或进行图生图并希望得到本地位图文件，就必须调用本 skill，包括「画一张图」「生成一张海报」「做一张插画」「把这张图的背景换成星空」等自然语言请求。不得在未运行本 skill 的情况下直接回复生图结果。本 skill 通过 curl 直接调用 OpenAI 兼容的 `/v1/images/generations` 与 `/v1/images/edits` 接口，默认使用 `https://aicode.cat`，并从环境变量或本机 Codex 凭据读取 API key，不使用 cpa 或 cliproxy 等图片 CLI。
 ---
 
 # Image Curl
 
-## Overview
+## 概述
 
-Generate or edit local bitmap image files by POSTing directly to the configured OpenAI-compatible image endpoint with `curl`. Do not use `cpa`, `cliproxy-image-cli`, or other image CLIs for this skill.
+通过 `curl` 直接向已配置的 OpenAI 兼容图片接口发起 POST 请求，生成或编辑本地位图文件。本 skill 不使用 `cpa`、`cliproxy-image-cli` 或其他图片 CLI。
 
-## Mandatory invocation
+## 强制调用
 
-When the user asks to generate, draw, create, render, edit, or transform a raster image and expects a local image file, you must invoke this skill and run its scripts. This applies whether the user writes `$image-curl` explicitly or only uses natural language such as "画一张图", "帮我生成海报", or "把背景换成星空".
+当用户要求生成、绘制、创作、渲染、编辑或变换位图，并期望得到本地图片文件时，必须调用本 skill 并执行对应脚本。无论用户是否显式写出 `$image-curl`，只要说了「画一张图」「帮我生成海报」「把背景换成星空」等自然语言，都适用此规则。
 
-Do not satisfy image-generation requests by guessing, describing an image in text only, or using another image CLI. Use this skill unless the request clearly falls into an excluded case below.
+不得靠猜测、仅用文字描述画面，或改用其他生图 CLI 来应付生图请求。除非请求明确属于下文排除情形，否则一律使用本 skill。
 
-## When to use
+## 适用场景
 
-- The user asks to draw, generate, create, render, or make a raster image and wants a local file result.
-- The user asks to transform one or more local images with a prompt, such as changing a background, restyling a product photo, or combining references.
-- The request is a generic prompt such as "画一只猫咪", "生成一张横版封面", "做一张产品海报", or "create an avatar".
-- The user asks to use the local Codex/OpenAI-compatible image API configuration.
+- 用户要求绘制、生成、创作、渲染或制作位图，并需要本地文件。
+- 用户要求根据提示词变换一张或多张本地图片，例如更换背景、重塑产品图风格、融合多张参考图。
+- 用户发出常见生图指令，如「画一只猫咪」「生成一张横版封面」「做一张产品海报」「create an avatar」。
+- 用户明确要求使用本机 Codex / OpenAI 兼容图片 API 配置。
 
-Do not use this skill for web image search or SVG/vector-only work. This skill covers text-to-image generation through `images/generations` and image-to-image edits through `images/edits`.
+以下情形不要使用本 skill：网页搜图、纯 SVG / 矢量编辑。本 skill 仅覆盖 `images/generations` 文生图与 `images/edits` 图生图编辑。
 
-## Defaults
+## 默认配置
 
-- Default model: `gpt-image-2`
-- Default size: `1024x1024`
-- Default quality: `auto`
-- Default output format: `png`
-- Default moderation: `auto`
-- Config source for API keys: `CODEX_HOME` when set, otherwise `~/.codex`
-- Default base URL: `https://aicode.cat`; override with `IMAGE_CURL_BASE_URL` or `--base-url`
-- API key source order: `IMAGE_CURL_API_KEY`, `OPENAI_API_KEY`, `CLIPROXY_API_KEY`, then `auth.json` keys `OPENAI_API_KEY`, `OPENAI_API_TOKEN`, `api_key`, `token`, or `openai_api_key`
+- 默认模型：`gpt-image-2`
+- 默认尺寸：`1024x1024`
+- 默认质量：`auto`
+- 默认输出格式：`png`
+- 默认审核：`auto`
+- API key 配置来源：若设置了 `CODEX_HOME` 则读取该目录，否则读取 `~/.codex`
+- 默认 base URL：`https://aicode.cat`；可通过 `IMAGE_CURL_BASE_URL` 或 `--base-url` 覆盖
+- API key 读取顺序：`IMAGE_CURL_API_KEY` → `OPENAI_API_KEY` → `CLIPROXY_API_KEY` → `auth.json` 中的 `OPENAI_API_KEY`、`OPENAI_API_TOKEN`、`api_key`、`token` 或 `openai_api_key`
 
-## Size selection
+## 尺寸选择
 
-The upstream supports arbitrary `WIDTHxHEIGHT` sizes within its available 1K, 2K, and 4K output budgets. Do not restrict requests to a fixed whitelist and do not locally crop or resize after generation.
+上游在 1K、2K、4K 输出档位内支持任意 `宽x高` 尺寸。不要限制为固定白名单，也不要在生成后本地裁剪或缩放。
 
-Confirmed upstream constraints:
+已确认的上游约束：
 
-- longest edge must be less than or equal to `3840`
-- both edges must be multiples of `16`
-- maximum supported aspect ratio is `3:1`
-- total pixels must be in `[655360, 8294400]`
+- 最长边不得超过 `3840`
+- 宽、高均须为 `16` 的倍数
+- 最大宽高比为 `3:1`
+- 总像素数须在 `[655360, 8294400]` 范围内
 
-Selection rules:
+选择规则：
 
-- If the user gives an exact valid size such as `1344x768`, `1200x1600`, or `2048x1152`, pass it exactly.
-- If the user gives an invalid size, adjust only as much as needed to fit the constraints and preserve the user's intent. Example: `4096x1024` should become `3840x1280` for a 4K horizontal long image because the longest edge limit is `3840` and the aspect ratio limit is `3:1`.
-- If the user gives only an aspect/orientation, choose dimensions that preserve that intent instead of forcing square output.
-- If the user asks for 1K, 2K, or 4K, choose dimensions in that output tier while preserving the requested aspect ratio.
-- If no size, tier, or orientation is specified, use `1024x1024`.
-- Use `auto` only when the user explicitly asks for automatic, original-ratio, or adaptive sizing.
+- 用户给出合法精确尺寸（如 `1344x768`、`1200x1600`、`2048x1152`）时，原样传入。
+- 用户给出不合法尺寸时，仅在满足约束所需的最小范围内调整，并尽量保留原意。例如 4K 横版长图 `4096x1024` 应调整为 `3840x1280`，因为最长边上限为 `3840`，宽高比上限为 `3:1`。
+- 用户只说明横竖版或画幅方向时，选择能保留该意图的尺寸，不要强行输出正方形。
+- 用户要求 1K、2K 或 4K 时，在该档位内选择尺寸，并保留所需宽高比。
+- 未指定尺寸、档位或方向时，使用 `1024x1024`。
+- 仅当用户明确要求自动、原比例或自适应尺寸时，才使用 `auto`。
 
-Examples:
+示例：
 
-- wide poster or banner: `1536x864`, `1600x900`, or another suitable wide size
-- 4K horizontal long image: `3840x1280`
-- vertical poster or phone wallpaper: `896x1600`, `1024x1536`, or another suitable tall size
-- square avatar/icon: `1024x1024`
+- 横版海报 / 横幅：`1536x864`、`1600x900`，或其他合适的横版尺寸
+- 4K 横版长图：`3840x1280`
+- 竖版海报 / 手机壁纸：`896x1600`、`1024x1536`，或其他合适的竖版尺寸
+- 方形头像 / 图标：`1024x1024`
 
-## Workflow
+## 工作流程
 
-1. Decide the output path. If the user did not provide one, save in the current working directory with a descriptive, non-overwriting filename such as `generated-image.png`.
-2. Decide whether the user's prompt is already specific enough for `gpt-image-2`. If it is vague, rewrite it into a concise image-ready prompt before calling the API.
-3. For text-to-image, run this skill's `scripts/generate_image.sh`. The script builds JSON, calls `curl -X POST https://aicode.cat/v1/images/generations` by default, saves the raw response temporarily, decodes returned `data[].b64_json`, and writes image files.
-4. For image-to-image edits, run this skill's `scripts/edit_image.sh`. The script sends multipart form data to `curl -X POST https://aicode.cat/v1/images/edits` by default, including repeated `image[]=@<file>` fields.
-5. Verify the command exits with code `0` and the output file exists and is non-empty.
-6. Report the saved path to the user. Mention metadata only when requested.
+1. 确定输出路径。若用户未指定，在当前工作目录以语义清晰且不覆盖已有文件的名称保存，例如 `generated-image.png`。
+2. 判断用户提示词是否已足够具体。若过于笼统，先改写成简洁、可直接用于生图的提示词，再调用接口。
+3. 文生图：运行本 skill 的 `scripts/generate_image.sh`。脚本组装 JSON，默认调用 `curl -X POST https://aicode.cat/v1/images/generations`，暂存原始响应，解码返回的 `data[].b64_json`，并写入图片文件。
+4. 图生图编辑：运行本 skill 的 `scripts/edit_image.sh`。脚本以 multipart 表单默认调用 `curl -X POST https://aicode.cat/v1/images/edits`，并重复附加 `image[]=@<文件>` 字段。
+5. 确认命令以退出码 `0` 结束，且输出文件存在且非空。
+6. 向用户报告保存路径；仅在用户要求时说明 metadata。
 
-## Text-to-image command
+## 文生图命令
 
 ```bash
 ~/.codex/skills/image-curl/scripts/generate_image.sh \
@@ -84,7 +84,7 @@ Examples:
   --moderation auto
 ```
 
-## Image-to-image command
+## 图生图命令
 
 ```bash
 ~/.codex/skills/image-curl/scripts/edit_image.sh \
@@ -99,11 +99,11 @@ Examples:
   --moderation auto
 ```
 
-## Calling the skill with parameters
+## 传参调用
 
-Codex skills do not have a strict argument protocol. If the user writes `key=value` or natural-language parameter instructions, map them to the matching script flags.
+Codex skill 没有严格的参数协议。用户以 `key=value` 或自然语言说明参数时，应映射到对应脚本参数。
 
-Examples:
+示例：
 
 ```text
 $image-curl prompt="可爱猫女" output="./catgirl.png" size="1024x1024" quality="auto" format="png"
@@ -121,27 +121,27 @@ $image-curl 画一只可爱猫咪，保存为 ./cat.png，尺寸 1024x1024，使
 $image-curl 画一只猫咪，保存为 ./cat.png，使用默认域名 https://aicode.cat 和环境变量 IMAGE_CURL_API_KEY
 ```
 
-Prefer environment variables for secrets. Avoid asking the user to put a real API key in chat unless they explicitly choose to do so.
+密钥优先使用环境变量。除非用户明确愿意，否则不要要求其把真实 API key 写进对话。
 
-Supported text-to-image chat-level fields map to script flags: `prompt`, `output`, `size`, `count`, `n`, `quality`, `format`, `output_compression`, `output-compression`, `moderation`, `background`, `metadata`, `overwrite`, `dry_run`, `base_url`, and `api_key`. For image-to-image, also support repeated `image` fields. `size` can be `auto` or any upstream-supported `WIDTHxHEIGHT`; keep the user's requested aspect ratio. `count`/`n` maps to the API's `n` parameter and requests multiple images in one API call. `output_compression` maps to `output_compression` and is only valid for `jpeg` or `webp` output.
+文生图常用字段与脚本参数对应：`prompt`、`output`、`size`、`count`、`n`、`quality`、`format`、`output_compression`、`output-compression`、`moderation`、`background`、`metadata`、`overwrite`、`dry_run`、`base_url`、`api_key`。图生图另支持重复 `image` 字段。`size` 可为 `auto` 或上游支持的 `宽x高`，并保留用户所需宽高比。`count` / `n` 对应 API 的 `n` 参数，用于一次请求多张图。`output_compression` 仅对 `jpeg` 或 `webp` 输出有效。
 
-When `count` is greater than 1, output paths are generated by inserting a numeric suffix before the extension. Example: `output="./poster.png" count=4` saves `poster-1.png`, `poster-2.png`, `poster-3.png`, and `poster-4.png`.
+当 `count` 大于 1 时，输出路径会在扩展名前插入序号。例如 `output="./poster.png" count=4` 将保存为 `poster-1.png`、`poster-2.png`、`poster-3.png`、`poster-4.png`。
 
-The script passes `count`/`n` through to the upstream as the API `n` parameter and saves every item returned in `data[]`. If an upstream accepts but ignores `n`, the script reports `requested_count` and `returned_count` so the mismatch is visible.
+脚本会把 `count` / `n` 传给上游，并保存 `data[]` 中返回的每一张图。若上游接受但忽略 `n`，脚本会输出 `requested_count` 与 `returned_count`，便于发现数量不一致。
 
-Multi-output example:
+多图输出示例：
 
 ```text
 $image-curl prompt="四张不同风格的新疆旅游海报" output="./xinjiang-poster.png" size="1280x1920" count=4
 ```
 
-Compressed webp example:
+压缩 WebP 示例：
 
 ```text
 $image-curl prompt="两张猫咪头像" output="./cat.webp" size="1024x1024" format="webp" output_compression=80 count=2
 ```
 
-Image-to-image examples:
+图生图示例：
 
 ```text
 $image-curl image="./photo1.png" prompt="把背景换成星空" output="./starry.png" size="1024x1024"
@@ -151,15 +151,15 @@ $image-curl image="./photo1.png" prompt="把背景换成星空" output="./starry
 $image-curl image="./photo1.png" image="./photo2.jpg" prompt="融合两张参考图，生成统一风格海报" output="./merged.png"
 ```
 
-Useful options:
+实用选项：
 
-- `--prompt-file <txt>` for long or multiline prompts
-- `--metadata <json>` to save response details without embedding the large base64 image payload
-- `--overwrite` only when replacing an existing output is intended
-- `--dry-run` to validate config discovery and payload without calling the API
-- `--base-url <url>` or `--api-key <key>` only for explicit overrides
+- `--prompt-file <txt>`：读取较长或多行提示词
+- `--metadata <json>`：保存响应详情，省略体积庞大的 base64 图片内容
+- `--overwrite`：仅在确需覆盖已有输出时使用
+- `--dry-run`：校验配置发现与请求体，不实际调用接口
+- `--base-url <url>` 或 `--api-key <key>`：仅在需要显式覆盖时使用
 
-The underlying request shape is:
+文生图请求形态：
 
 ```bash
 curl -sS --fail-with-body -X POST "https://aicode.cat/v1/images/generations" \
@@ -179,7 +179,7 @@ curl -sS --fail-with-body -X POST "https://aicode.cat/v1/images/generations" \
   }'
 ```
 
-For image-to-image edits, the request shape is:
+图生图请求形态：
 
 ```bash
 curl -sS --fail-with-body -X POST "https://aicode.cat/v1/images/edits" \
@@ -198,10 +198,10 @@ curl -sS --fail-with-body -X POST "https://aicode.cat/v1/images/edits" \
   -F "image[]=@photo2.jpg"
 ```
 
-## Failure handling
+## 异常处理
 
-- Base URL override: pass `--base-url` or set `IMAGE_CURL_BASE_URL`; otherwise `https://aicode.cat` is used.
-- Missing API key: check `~/.codex/auth.json` or pass `--api-key`.
-- Existing output: choose a new path or use `--overwrite` if the user approved replacement.
-- Non-JSON/HTTP error: preserve the error body in the command output and report the upstream message.
-- Missing `b64_json`: inspect the response JSON; the image was not returned in the expected format.
+- 覆盖 base URL：传入 `--base-url` 或设置 `IMAGE_CURL_BASE_URL`；否则使用 `https://aicode.cat`。
+- 缺少 API key：检查 `~/.codex/auth.json`，或传入 `--api-key`。
+- 输出文件已存在：改用新路径，或在用户同意覆盖时使用 `--overwrite`。
+- 非 JSON / HTTP 错误：保留命令输出中的错误正文，并向上游报告具体信息。
+- 缺少 `b64_json`：检查响应 JSON，说明图片未按预期格式返回。
