@@ -17,8 +17,8 @@ function Show-GenerateUsage {
   --name PREFIX         可读文件名前缀，默认 generated；未指定 --output-dir 时写入
                         ${CODEX_HOME:-~/.codex}/generated_images/<thread|manual>/
   --model NAME          图片模型，默认：gpt-image-2
-  --size SIZE           auto、宽x高、宽:高 或 tier 简写（如 16:9、9:16@1k、2k、4k）
-                        解析后须满足：边长为 16 的倍数，最长边 <=3840，宽高比 <=3:1
+  --size SIZE           仅允许白名单（见 scripts/lib/allowed_sizes.json / SKILL.md「要用」）
+                        例：1024x1024、16:9、9:16@2k、4k@16:9；不要用 4k、1920x1080 等
   --quality VALUE       默认：auto
   --format FORMAT       png、jpeg 或 webp，默认：png
   --output-compression N
@@ -56,7 +56,6 @@ if (-not $argsObj.format) { Write-ImageCurlError '--format 不能为空。' }
 $requestedSize = $argsObj.size
 $resolvedSize = Resolve-ImageSize -Spec $requestedSize
 $size = $resolvedSize.ApiSize.ToLowerInvariant()
-Test-ImageSize -Size $size
 
 $format = $argsObj.format.ToLowerInvariant()
 if ($format -eq 'jpg') { $format = 'jpeg' }

@@ -65,8 +65,9 @@ Path(thread_dir, "last_output_set.json").write_text(
 )
 PY
 
-  CODEX_HOME="$codex_home" unset CODEX_THREAD_ID CODEX_SESSION_ID
+  CODEX_HOME="$codex_home"
   export CODEX_HOME
+  unset CODEX_THREAD_ID CODEX_SESSION_ID
   local result
   result="$(resolve_image_refs manual --image "[Last Output #2]")"
   local count
@@ -78,8 +79,9 @@ PY
 test_rollout_requires_thread() {
   local codex_home
   codex_home="$(new_temp_codex_home)"
-  CODEX_HOME="$codex_home" unset CODEX_THREAD_ID CODEX_SESSION_ID
+  CODEX_HOME="$codex_home"
   export CODEX_HOME
+  unset CODEX_THREAD_ID CODEX_SESSION_ID
   if resolve_image_refs manual --image "[Image #1]" >/dev/null 2>&1; then
     rm -rf "$codex_home"
     return 1

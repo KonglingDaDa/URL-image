@@ -13,11 +13,14 @@
 
 也可直接调用子脚本：`generate_image.*`、`edit_image.*`、`generate_batch.*`。
 
+**脚本根目录**：仓库内为 `skill_src/image-curl`；安装后为 `~/.codex/skills/image-curl`（Windows：`%USERPROFILE%\.codex\skills\image-curl`）。Agent 在仓库内开发时**必须用仓库路径**，不要写死 `~/.codex/skills/...`。
+
 ```bash
-# macOS / Linux
-~/.codex/skills/image-curl/scripts/image-curl.sh generate --prompt "一只猫" --name cat
-~/.codex/skills/image-curl/scripts/image-curl.sh edit --image ./in.png --prompt "换背景" --name out
-~/.codex/skills/image-curl/scripts/image-curl.sh generate-batch --input prompts.jsonl --output-dir ./batch-out
+# macOS / Linux — SKILL_ROOT 按上表替换
+SKILL_ROOT=./skill_src/image-curl
+"$SKILL_ROOT/scripts/image-curl.sh" generate --prompt "一只猫" --name cat
+"$SKILL_ROOT/scripts/image-curl.sh" edit --image ./in.png --prompt "换背景" --name out
+"$SKILL_ROOT/scripts/image-curl.sh" generate-batch --input prompts.jsonl --output-dir ./batch-out
 ```
 
 ```powershell
@@ -31,7 +34,7 @@
 - 模型需要看到真实图片输入时，用 `edit`，不要用 `generate`（`generate` 传 `--image` 会警告并应改用 `edit`）。
 - `edit` **不隐式继承**线程图片状态；复用历史图须显式 `--image` 占位符或 `--image-set` 选择器。
 - 占位符与 rollout 类 `--image-set` 需要 `CODEX_THREAD_ID` 或 `CODEX_SESSION_ID`；无会话时仍可用本地路径与 `[Last Output]`（若状态文件存在）。
-- 默认输出目录：`${CODEX_HOME:-~/.codex}/generated_images/<thread_id|manual>/`。
+- 默认输出目录（首个可写）：`IMAGE_CURL_OUTPUT_DIR` → `${CODEX_HOME:-~/.codex}/generated_images` → `./.image-curl-output`，其下 `<thread_id|manual>/`。
 - `--output` 写精确路径；`--output-dir` + `--name` 生成「前缀-随机后缀」；仅 `--name` 写入默认目录。
 
 ## 常用选项
@@ -41,7 +44,7 @@
 - `--prompt` / `--prompt-file`
 - `--output` / `--output-dir` / `--name`
 - `--model`（默认 `gpt-image-2`）
-- `--size`：`auto`、`宽x高`、`宽:高`、`2k`、`16:9`、`9:16@2k` 等
+- `--size`：仅允许白名单格式（见下文「要用 / 不要用」）；完整列表见 `scripts/lib/allowed_sizes.json`
 - `--quality`、`--format`、`--output-compression`、`--moderation`
 - `--count` / `--n`（1–10）
 - `--metadata`、`--overwrite`、`--dry-run`
@@ -69,18 +72,37 @@
 
 变体如 `[Image#1]`、`[image # 1]` 会自动规范化。
 
-## 尺寸简写示例
+## 尺寸：要用 / 不要用
 
-| 输入 | 解析结果 |
+完整白名单：`scripts/lib/allowed_sizes.json`。`--size` 只能填「要用」列中的值。
+
+### 要用
+
+| 输入 | 发给上游 |
 |---|---|
-| `16:9` | `3840x2160` |
-| `9:16` | `2160x3840` |
-| `9:16@1k` | `1008x1792` |
-| `9:16@2k` | `2016x3584` |
-| `2k` | `2048x2048` |
-| `1000x1800` | 原样发送（显式像素） |
+| `1024x1024`（默认） | `1024x1024` |
+| `auto` | `auto` |
+| `1280x720` | `1280x720` |
+| `1k` / `2k` | `1024x1024` / `2048x2048` |
+| `16:9` / `9:16` / `1:1` | `3840x2160` / `2160x3840` / `2880x2880` |
+| `3:1` / `1:3` | `3840x1280` / `1280x3840` |
+| `9:16@1k` / `9:16@2k` | `1008x1792` / `2016x3584` |
+| `1k@16:9` / `16:9@1k` / `16:9@2k` | `1792x1008` / `1792x1008` / `3584x2016` |
+| `4k@16:9` / `16:9@4k` | `3840x2160` |
+| `4k@9:16` / `9:16@4k` | `2160x3840` |
 
-显式 `宽x高` 会在提示词末尾追加画布约束说明。
+### 不要用
+
+| 输入 | 请改用 |
+|---|---|
+| `4k` | `4k@16:9`、`16:9@4k`、`4k@9:16`、`9:16@4k` |
+| `1920x1080` / `1080x1920` | `16:9` / `9:16` |
+| `1000x1800` | `9:16@1k` / `9:16` |
+| `3840x2160` / `2160x3840` | `16:9` / `9:16` |
+| `512x512` | `1k` / `1024x1024` |
+| 其他任意 `宽x高` | 最接近的「要用」简写 |
+
+白名单内的显式像素（`1024x1024`、`1280x720`）会在提示词末尾追加画布约束说明。
 
 ## 批量 JSONL
 

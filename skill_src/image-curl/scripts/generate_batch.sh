@@ -120,8 +120,8 @@ defaults_json="$(python3 -c 'import json,sys; print(json.dumps({
 }, ensure_ascii=False))' "$model" "$size" "$quality" "$format" "$output_compression" "$moderation" "$background" "$count" "$metadata")"
 
 jobs_json="$(read_batch_jobs_jsonl "$input")"
-mapfile -t job_lines < <(python3 -c 'import json,sys; jobs=json.loads(sys.stdin.read());
-for job in jobs: print(json.dumps(job, ensure_ascii=False))' <<<"$jobs_json")
+read_lines_into_array job_lines python3 -c 'import json,sys; jobs=json.loads(sys.argv[1]);
+for job in jobs: print(json.dumps(job, ensure_ascii=False))' "$jobs_json"
 
 config_json="$(resolve_image_curl_config "$base_url" "$api_key")"
 base_url="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["base_url"])' "$config_json")"
@@ -197,33 +197,12 @@ run_batch_job() {
   fi
 
   local api_size="" size_note="" is_explicit_dimension=0
-  local size_meta="$batch_tmp_dir/size-meta-${index}.json"
   err_file="$batch_tmp_dir/size-${index}.err"
-  if ! (
-    api_size="" size_note="" is_explicit_dimension=0
-    resolve_size "$requested_size" api_size size_note is_explicit_dimension
-    python3 - "$api_size" "$size_note" "$is_explicit_dimension" <<'PY'
-import json
-import sys
-print(json.dumps({
-    "api_size": sys.argv[1],
-    "size_note": sys.argv[2],
-    "is_explicit_dimension": sys.argv[3],
-}, ensure_ascii=False))
-PY
-  ) 2>"$err_file" >"$size_meta"; then
+  if ! capture_die "$err_file" try_resolve_size "$requested_size" api_size size_note is_explicit_dimension; then
     batch_job_fail "$index" "$(if [[ -s "$err_file" ]]; then tr '\n' ' ' <"$err_file"; else echo "无法解析尺寸：$requested_size"; fi)"
     return 1
   fi
-  api_size="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["api_size"])' "$size_meta")"
-  size_note="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["size_note"])' "$size_meta")"
-  is_explicit_dimension="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["is_explicit_dimension"])' "$size_meta")"
-  err_file="$batch_tmp_dir/test-size-${index}.err"
-  if ! capture_die "$err_file" test_image_size "$api_size" >/dev/null; then
-    batch_job_fail "$index" "$(tr '\n' ' ' <"$err_file")"
-    return 1
-  fi
-  api_size="${api_size,,}"
+  api_size="$(to_lower "$api_size")"
 
   if [[ "$is_explicit_dimension" == "1" ]]; then
     prompt="$(augment_prompt_for_size "$prompt" "$requested_size")"
@@ -391,22 +370,7 @@ for job_index in $(seq 1 "${#job_lines[@]}"); do
     while IFS= read -r saved_path; do
       [[ -n "$saved_path" ]] && saved_paths+=("$saved_path")
       printf '%s\n' "$saved_path"
-    done < <(python3 - "$batch_tmp_dir/result-${job_index}.json" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-if isinstance(data.get("saved_files"), list):
-    for item in data["saved_files"]:
-        if isinstance(item, dict) and item.get("file"):
-            print(item["file"])
-        elif isinstance(item, str):
-            print(item)
-elif data.get("saved_file"):
-    print(data["saved_file"])
-PY
-)
+    done < <(extract_saved_paths_from_result "$(<"$batch_tmp_dir/result-${job_index}.json")")
   else
     failures+=("job ${job_index} failed: 未产生结果文件（worker 异常退出）")
   fi

@@ -1,29 +1,5 @@
 [
   {
-    "input": "9:16",
-    "api_size": "2160x3840",
-    "size_note": "normalized image size 9:16 -> 2160x3840",
-    "is_explicit_dimension": false
-  },
-  {
-    "input": "9:16@1k",
-    "api_size": "1008x1792",
-    "size_note": "normalized image size 9:16@1k -> 1008x1792",
-    "is_explicit_dimension": false
-  },
-  {
-    "input": "16:9",
-    "api_size": "3840x2160",
-    "size_note": "normalized image size 16:9 -> 3840x2160",
-    "is_explicit_dimension": false
-  },
-  {
-    "input": "1000x1800",
-    "api_size": "1000x1800",
-    "size_note": null,
-    "is_explicit_dimension": true
-  },
-  {
     "input": "auto",
     "api_size": "auto",
     "size_note": null,
@@ -34,6 +10,60 @@
     "api_size": "1024x1024",
     "size_note": null,
     "is_explicit_dimension": true
+  },
+  {
+    "input": "1280x720",
+    "api_size": "1280x720",
+    "size_note": null,
+    "is_explicit_dimension": true
+  },
+  {
+    "input": "1k",
+    "api_size": "1024x1024",
+    "size_note": "normalized image size 1k -> 1024x1024",
+    "is_explicit_dimension": false
+  },
+  {
+    "input": "2k",
+    "api_size": "2048x2048",
+    "size_note": "normalized image size 2k -> 2048x2048",
+    "is_explicit_dimension": false
+  },
+  {
+    "input": "16:9",
+    "api_size": "3840x2160",
+    "size_note": "normalized image size 16:9 -> 3840x2160",
+    "is_explicit_dimension": false
+  },
+  {
+    "input": "9:16",
+    "api_size": "2160x3840",
+    "size_note": "normalized image size 9:16 -> 2160x3840",
+    "is_explicit_dimension": false
+  },
+  {
+    "input": "1:1",
+    "api_size": "2880x2880",
+    "size_note": "normalized image size 1:1 -> 2880x2880",
+    "is_explicit_dimension": false
+  },
+  {
+    "input": "3:1",
+    "api_size": "3840x1280",
+    "size_note": "normalized image size 3:1 -> 3840x1280",
+    "is_explicit_dimension": false
+  },
+  {
+    "input": "1:3",
+    "api_size": "1280x3840",
+    "size_note": "normalized image size 1:3 -> 1280x3840",
+    "is_explicit_dimension": false
+  },
+  {
+    "input": "9:16@1k",
+    "api_size": "1008x1792",
+    "size_note": "normalized image size 9:16@1k -> 1008x1792",
+    "is_explicit_dimension": false
   },
   {
     "input": "9:16@2k",
@@ -48,9 +78,39 @@
     "is_explicit_dimension": false
   },
   {
-    "input": "2k",
-    "api_size": "2048x2048",
-    "size_note": "normalized image size 2k -> 2048x2048",
+    "input": "16:9@1k",
+    "api_size": "1792x1008",
+    "size_note": "normalized image size 16:9@1k -> 1792x1008",
+    "is_explicit_dimension": false
+  },
+  {
+    "input": "16:9@2k",
+    "api_size": "3584x2016",
+    "size_note": "normalized image size 16:9@2k -> 3584x2016",
+    "is_explicit_dimension": false
+  },
+  {
+    "input": "4k@16:9",
+    "api_size": "3840x2160",
+    "size_note": "normalized image size 4k@16:9 -> 3840x2160",
+    "is_explicit_dimension": false
+  },
+  {
+    "input": "16:9@4k",
+    "api_size": "3840x2160",
+    "size_note": "normalized image size 16:9@4k -> 3840x2160",
+    "is_explicit_dimension": false
+  },
+  {
+    "input": "4k@9:16",
+    "api_size": "2160x3840",
+    "size_note": "normalized image size 4k@9:16 -> 2160x3840",
+    "is_explicit_dimension": false
+  },
+  {
+    "input": "9:16@4k",
+    "api_size": "2160x3840",
+    "size_note": "normalized image size 9:16@4k -> 2160x3840",
     "is_explicit_dimension": false
   }
 ]

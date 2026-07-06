@@ -43,11 +43,11 @@ function Get-ImageCurlConfig {
 
     $codexHome = Get-FirstNonEmpty @($env:CODEX_HOME, (Join-Path $env:USERPROFILE '.codex'))
     $authPath = Join-Path $codexHome 'auth.json'
-    $baseUrl = Get-FirstNonEmpty @(
+    $baseUrl = (Get-FirstNonEmpty @(
         $OverrideBaseUrl,
         $env:IMAGE_CURL_BASE_URL,
         'https://aicode.cat'
-    ).TrimEnd('/')
+    )).TrimEnd('/')
 
     $apiKey = Get-FirstNonEmpty @(
         $OverrideApiKey,
@@ -91,227 +91,45 @@ function Get-ImageEndpoint {
     return "$routeBase/v1/images/$Kind"
 }
 
-$script:ImageSizeStep = 16
-$script:ImageMaxEdge = 3840
-$script:ImageMinPixels = 655360
-$script:ImageMaxPixels = 8294400
-$script:ImageMaxRatio = 3.0
-
-function Get-ImageSizeGcd {
-    param([long]$A, [long]$B)
-    while ($B -ne 0) {
-        $temp = $B
-        $B = $A % $B
-        $A = $temp
-    }
-    return $A
-}
-
-function Get-ImageSizeLcm {
-    param([long]$A, [long]$B)
-    if ($A -eq 0 -or $B -eq 0) { return 0 }
-    return ($A / (Get-ImageSizeGcd -A $A -B $B)) * $B
-}
-
-function Test-ResolvedImageSizeCandidate {
-    param([int]$Width, [int]$Height)
-    if ($Width -le 0 -or $Height -le 0) { return $false }
-    if (($Width % $script:ImageSizeStep) -ne 0 -or ($Height % $script:ImageSizeStep) -ne 0) { return $false }
-    if ($Width -gt $script:ImageMaxEdge -or $Height -gt $script:ImageMaxEdge) { return $false }
-    $pixels = $Width * $Height
-    if ($pixels -lt $script:ImageMinPixels -or $pixels -gt $script:ImageMaxPixels) { return $false }
-    $longEdge = [Math]::Max($Width, $Height)
-    $shortEdge = [Math]::Min($Width, $Height)
-    if (($longEdge / $shortEdge) -gt $script:ImageMaxRatio) { return $false }
-    return $true
-}
-
-function Get-ImageRatioCandidates {
-    param([int]$WidthRatio, [int]$HeightRatio)
-
-    $gcd = Get-ImageSizeGcd -A $WidthRatio -B $HeightRatio
-    $numerator = [int]($WidthRatio / $gcd)
-    $denominator = [int]($HeightRatio / $gcd)
-
-    if ([Math]::Max($numerator, $denominator) / [Math]::Min($numerator, $denominator) -gt $script:ImageMaxRatio) {
-        return @()
-    }
-
-    $stepMultiplier = Get-ImageSizeLcm -A ($script:ImageSizeStep / (Get-ImageSizeGcd -A $numerator -B $script:ImageSizeStep)) -B ($script:ImageSizeStep / (Get-ImageSizeGcd -A $denominator -B $script:ImageSizeStep))
-    $baseWidth = $numerator * $stepMultiplier
-    $baseHeight = $denominator * $stepMultiplier
-    $maxScale = [Math]::Min([int]($script:ImageMaxEdge / $baseWidth), [int]($script:ImageMaxEdge / $baseHeight))
-
-    $candidates = New-Object System.Collections.Generic.List[object]
-    for ($scale = 1; $scale -le $maxScale; $scale++) {
-        $width = $baseWidth * $scale
-        $height = $baseHeight * $scale
-        if (Test-ResolvedImageSizeCandidate -Width $width -Height $height) {
-            $candidates.Add([pscustomobject]@{ Width = $width; Height = $height })
-        }
-    }
-    return $candidates
-}
-
-function Compare-ImageSizeCandidateKeys {
-    param(
-        [object[]]$Left,
-        [object[]]$Right
-    )
-    for ($index = 0; $index -lt $Left.Count; $index++) {
-        if ($Left[$index] -lt $Right[$index]) { return -1 }
-        if ($Left[$index] -gt $Right[$index]) { return 1 }
-    }
-    return 0
-}
-
-function Get-ImageSizeCandidateKey {
-    param(
-        [object]$Candidate,
-        [int]$TargetWidth,
-        [int]$TargetHeight
-    )
-    $targetPixels = $TargetWidth * $TargetHeight
-    $distance = ($Candidate.Width - $TargetWidth) * ($Candidate.Width - $TargetWidth) +
-        ($Candidate.Height - $TargetHeight) * ($Candidate.Height - $TargetHeight)
-    $overshoot = [int](
-        ($Candidate.Width -gt $TargetWidth) -or
-        ($Candidate.Height -gt $TargetHeight) -or
-        ($Candidate.Width * $Candidate.Height -gt $targetPixels)
-    )
-    $pixelDiff = [Math]::Abs(($Candidate.Width * $Candidate.Height) - $targetPixels)
-    return @($distance, $overshoot, $pixelDiff, ($Candidate.Width * $Candidate.Height))
-}
-
-function Select-ImageSizeCandidate {
-    param(
-        [System.Collections.IEnumerable]$Candidates,
-        [int]$TargetWidth = -1,
-        [int]$TargetHeight = -1
-    )
-
-    $list = @($Candidates)
-    if ($list.Count -eq 0) {
-        Write-ImageCurlError "no valid image size candidate found under OpenAI constraints (edge <= $($script:ImageMaxEdge), divisible by $($script:ImageSizeStep), pixels $($script:ImageMinPixels)-$($script:ImageMaxPixels), ratio <= $($script:ImageMaxRatio):1)"
-    }
-
-    if ($TargetWidth -lt 0 -or $TargetHeight -lt 0) {
-        $best = $null
-        $bestKey = $null
-        foreach ($candidate in $list) {
-            $key = @(
-                ($candidate.Width * $candidate.Height),
-                [Math]::Max($candidate.Width, $candidate.Height),
-                [Math]::Min($candidate.Width, $candidate.Height)
-            )
-            if ($null -eq $bestKey -or (Compare-ImageSizeCandidateKeys -Left $key -Right $bestKey) -gt 0) {
-                $best = $candidate
-                $bestKey = $key
-            }
-        }
-        return $best
-    }
-
-    $best = $null
-    $bestKey = $null
-    foreach ($candidate in $list) {
-        $key = Get-ImageSizeCandidateKey -Candidate $candidate -TargetWidth $TargetWidth -TargetHeight $TargetHeight
-        if ($null -eq $bestKey -or (Compare-ImageSizeCandidateKeys -Left $key -Right $bestKey) -lt 0) {
-            $best = $candidate
-            $bestKey = $key
-        }
-    }
-    return $best
-}
-
 function Resolve-ImageSize {
     param([string]$Spec)
 
-    $rawSpec = $Spec.Trim()
-    if ($rawSpec.ToLowerInvariant() -eq 'auto') {
-        return [pscustomobject]@{
-            ApiSize               = 'auto'
-            SizeNote              = $null
-            IsExplicitDimension   = $false
-        }
+    $normalizePy = Join-Path $script:ImageCurlScriptDir 'lib/normalize_size.py'
+    if (-not (Test-Path -LiteralPath $normalizePy)) {
+        Write-ImageCurlError "未找到尺寸解析脚本：$normalizePy"
     }
 
-    if ($rawSpec -match '^\s*([1-9]\d*)\s*[kK]\s*$') {
-        $tierEdge = [int]$Matches[1] * 1024
-        $normalized = "${tierEdge}x${tierEdge}"
-        if (Test-ResolvedImageSizeCandidate -Width $tierEdge -Height $tierEdge) {
-            return [pscustomobject]@{
-                ApiSize               = $normalized
-                SizeNote              = "normalized image size $rawSpec -> $normalized"
-                IsExplicitDimension   = $false
+    $python = Get-ThreadStatePython
+    $stderrFile = [System.IO.Path]::GetTempFileName()
+    try {
+        $stdout = & $python.Exe @($python.Prefix + $normalizePy, $Spec.Trim()) 2>$stderrFile
+        if ($LASTEXITCODE -ne 0) {
+            $message = ''
+            if (Test-Path -LiteralPath $stderrFile) {
+                $message = (Get-Content -LiteralPath $stderrFile -Raw -Encoding UTF8 -ErrorAction SilentlyContinue).Trim()
             }
+            if (-not $message) {
+                $message = "无法解析尺寸：$($Spec.Trim())"
+            }
+            Write-ImageCurlError $message
         }
-        Write-ImageCurlError "invalid image size tier: $rawSpec"
-    }
 
-    if ($rawSpec -match '^\s*(?:(\d+\s*:\s*\d+)\s*(?:@|,|\s+)\s*([1-9]\d*\s*[kK])|([1-9]\d*\s*[kK])\s*(?:@|,|\s+)\s*(\d+\s*:\s*\d+))\s*$') {
-        $ratioText = if ($Matches[1]) { $Matches[1] } else { $Matches[4] }
-        $tierText = if ($Matches[2]) { $Matches[2] } else { $Matches[3] }
-        if ($ratioText -notmatch '^\s*(\d+)\s*:\s*(\d+)\s*$') {
-            Write-ImageCurlError "invalid image ratio: $ratioText"
+        try {
+            $parsed = ($stdout | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] }) -join "`n" | ConvertFrom-Json
+        } catch {
+            Write-ImageCurlError "尺寸解析 JSON 无效：$($_.Exception.Message)"
         }
-        $widthRatio = [int]$Matches[1]
-        $heightRatio = [int]$Matches[2]
-        if ($widthRatio -le 0 -or $heightRatio -le 0) {
-            Write-ImageCurlError "invalid image ratio: $ratioText"
-        }
-        if ($tierText -notmatch '^\s*([1-9]\d*)\s*[kK]\s*$') {
-            Write-ImageCurlError "invalid image size tier: $tierText"
-        }
-        $tierEdge = [int]$Matches[1] * 1024
-        $candidates = Get-ImageRatioCandidates -WidthRatio $widthRatio -HeightRatio $heightRatio
-        $gcd = Get-ImageSizeGcd -A $widthRatio -B $heightRatio
-        $numerator = [int]($widthRatio / $gcd)
-        $denominator = [int]($heightRatio / $gcd)
-        if ($numerator -ge $denominator) {
-            $targetHeight = $tierEdge
-            $targetWidth = [int][Math]::Round($tierEdge * $numerator / $denominator)
-        } else {
-            $targetWidth = $tierEdge
-            $targetHeight = [int][Math]::Round($tierEdge * $denominator / $numerator)
-        }
-        $chosen = Select-ImageSizeCandidate -Candidates $candidates -TargetWidth $targetWidth -TargetHeight $targetHeight
-        $normalized = "$($chosen.Width)x$($chosen.Height)"
+
         return [pscustomobject]@{
-            ApiSize               = $normalized
-            SizeNote              = "normalized image size $rawSpec -> $normalized"
-            IsExplicitDimension   = $false
+            ApiSize             = $parsed.api_size
+            SizeNote            = if ($parsed.size_note) { $parsed.size_note } else { $null }
+            IsExplicitDimension = [bool]$parsed.is_explicit_dimension
+        }
+    } finally {
+        if ($stderrFile -and (Test-Path -LiteralPath $stderrFile)) {
+            Remove-Item -LiteralPath $stderrFile -Force -ErrorAction SilentlyContinue
         }
     }
-
-    if ($rawSpec -match '^\s*(\d+)\s*[xX×]\s*(\d+)\s*$') {
-        $width = [int]$Matches[1]
-        $height = [int]$Matches[2]
-        $normalized = "${width}x${height}"
-        return [pscustomobject]@{
-            ApiSize               = $normalized
-            SizeNote              = $null
-            IsExplicitDimension   = $true
-        }
-    }
-
-    if ($rawSpec -match '^\s*(\d+)\s*:\s*(\d+)\s*$') {
-        $widthRatio = [int]$Matches[1]
-        $heightRatio = [int]$Matches[2]
-        if ($widthRatio -le 0 -or $heightRatio -le 0) {
-            Write-ImageCurlError "invalid image ratio: $rawSpec"
-        }
-        $candidates = Get-ImageRatioCandidates -WidthRatio $widthRatio -HeightRatio $heightRatio
-        $chosen = Select-ImageSizeCandidate -Candidates $candidates
-        $normalized = "$($chosen.Width)x$($chosen.Height)"
-        return [pscustomobject]@{
-            ApiSize               = $normalized
-            SizeNote              = "normalized image size $rawSpec -> $normalized"
-            IsExplicitDimension   = $false
-        }
-    }
-
-    Write-ImageCurlError 'invalid image size. Use auto, WIDTHxHEIGHT, or WIDTH:HEIGHT (examples: 3840x2160, 1792x1024, 9:16, 9:16@1k)'
 }
 
 function Get-PromptSizeConstraint {
@@ -343,29 +161,6 @@ function Add-PromptSizeConstraint {
         return $Prompt
     }
     return ($Prompt.TrimEnd() + "`n`n" + $constraint)
-}
-
-function Test-ImageSize {
-    param([string]$Size)
-    if ($Size -eq 'auto') { return }
-    if ($Size -notmatch '^([1-9][0-9]*)x([1-9][0-9]*)$') {
-        Write-ImageCurlError '--size 须为 auto 或 宽x高，例如 1024x1024、1344x768、2048x1152。'
-    }
-    $width = [int]$Matches[1]
-    $height = [int]$Matches[2]
-    $pixelCount = $width * $height
-    if ($width -gt 3840 -or $height -gt 3840) {
-        Write-ImageCurlError "--size '$Size' 不受上游支持：最长边不得超过 3840。"
-    }
-    if (($width % 16) -ne 0 -or ($height % 16) -ne 0) {
-        Write-ImageCurlError "--size '$Size' 不受上游支持：宽和高均须为 16 的倍数。"
-    }
-    if ($width -gt ($height * 3) -or $height -gt ($width * 3)) {
-        Write-ImageCurlError "--size '$Size' 不受上游支持：最大宽高比为 3:1。"
-    }
-    if ($pixelCount -lt 655360 -or $pixelCount -gt 8294400) {
-        Write-ImageCurlError "--size '$Size' 不受上游支持：总像素数须在 655360 至 8294400 之间。"
-    }
 }
 
 function Test-InputFidelity {
@@ -408,10 +203,38 @@ function Get-RandomOutputSuffix {
     return [guid]::NewGuid().ToString('N').Substring(0, $Length)
 }
 
+function Test-WritableDirectory {
+    param([string]$Path)
+    try {
+        if (-not (Test-Path -LiteralPath $Path)) {
+            New-Item -ItemType Directory -Path $Path -Force | Out-Null
+        }
+        $probe = Join-Path $Path (".write-test-" + [guid]::NewGuid().ToString('N'))
+        [System.IO.File]::WriteAllText($probe, 'ok')
+        Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+        return $true
+    } catch {
+        return $false
+    }
+}
+
 function Get-DefaultOutputDir {
-    $codexHome = Get-FirstNonEmpty @($env:CODEX_HOME, (Join-Path $env:USERPROFILE '.codex'))
     $threadId = Sanitize-PathSegment (Get-ImageCurlThreadId)
-    return (Join-Path (Join-Path $codexHome 'generated_images') $threadId)
+    $candidates = New-Object System.Collections.Generic.List[string]
+    if ($env:IMAGE_CURL_OUTPUT_DIR) {
+        $candidates.Add($env:IMAGE_CURL_OUTPUT_DIR)
+    }
+    $codexHome = Get-FirstNonEmpty @($env:CODEX_HOME, (Join-Path $env:USERPROFILE '.codex'))
+    $candidates.Add((Join-Path (Join-Path $codexHome 'generated_images') $threadId))
+    $candidates.Add((Join-Path (Join-Path (Get-Location).Path '.image-curl-output') $threadId))
+
+    foreach ($candidate in $candidates) {
+        if (Test-WritableDirectory -Path $candidate) {
+            return $candidate
+        }
+    }
+
+    return $candidates[$candidates.Count - 1]
 }
 
 function Resolve-OutputPath {
@@ -528,7 +351,7 @@ function Save-ImageCurlResponse {
         }
         [System.IO.File]::WriteAllBytes($target, $bytes)
         $savedFiles += [pscustomobject]@{
-            path           = (Normalize-PathForJson $target)
+            file           = (Normalize-PathForJson $target)
             bytes          = $bytes.Length
             revised_prompt = $item.revised_prompt
         }
@@ -541,7 +364,7 @@ function Save-ImageCurlResponse {
                 $item.b64_json = '<omitted>'
             }
         }
-        $sanitized | Add-Member -NotePropertyName saved_files -NotePropertyValue @($savedFiles | ForEach-Object { $_.path }) -Force
+        $sanitized | Add-Member -NotePropertyName saved_files -NotePropertyValue @($savedFiles | ForEach-Object { $_.file }) -Force
         $sanitized | Add-Member -NotePropertyName requested_count -NotePropertyValue $RequestedCount -Force
         $metaDir = Split-Path -Parent $MetadataPath
         if ($metaDir -and -not (Test-Path -LiteralPath $metaDir)) {
@@ -552,7 +375,7 @@ function Save-ImageCurlResponse {
 
     if ($RequestedCount -eq 1 -and $savedFiles.Count -eq 1) {
         return [pscustomobject]@{
-            saved_file     = $savedFiles[0].path
+            saved_file     = $savedFiles[0].file
             bytes          = $savedFiles[0].bytes
             revised_prompt = $savedFiles[0].revised_prompt
         }
@@ -660,7 +483,6 @@ function Invoke-ImageCurlBatchJob {
     $requestedSize = $Descriptor.size
     $resolvedSize = Resolve-ImageSize -Spec $requestedSize
     $size = $resolvedSize.ApiSize.ToLowerInvariant()
-    Test-ImageSize -Size $size
 
     $prompt = Add-PromptSizeConstraint -Prompt $Descriptor.prompt -RawSpec $requestedSize -ApiSize $size
 
@@ -1034,7 +856,9 @@ function Get-SavedPathsFromResult {
     if ($null -eq $Result) { return @() }
     if ($Result.PSObject.Properties['saved_files']) {
         return @($Result.saved_files | ForEach-Object {
-            if ($_ -is [string]) { $_ } else { $_.path }
+            if ($_ -is [string]) { $_ }
+            elseif ($null -ne $_.PSObject.Properties['file']) { $_.file }
+            else { $_.path }
         })
     }
     if ($Result.PSObject.Properties['saved_file']) {

@@ -8,8 +8,10 @@ import json
 import math
 import re
 import sys
+from functools import lru_cache
 from fractions import Fraction
-from typing import NoReturn
+from pathlib import Path
+from typing import Any, NoReturn
 
 IMAGE_SIZE_STEP = 16
 IMAGE_MAX_EDGE = 3840
@@ -26,9 +28,66 @@ SIZE_RATIO_TIER_PATTERN = re.compile(
 )
 
 
+ALLOWED_SIZES_PATH = Path(__file__).with_name("allowed_sizes.json")
+
+
 def fail(message: str, *, status: int = 1) -> NoReturn:
     print(message, file=sys.stderr)
     raise SystemExit(status)
+
+
+def canonicalize_size_spec(spec: str) -> str:
+    return re.sub(r"\s+", "", spec.strip().lower().replace("×", "x"))
+
+
+@lru_cache(maxsize=1)
+def load_allowed_sizes_catalog() -> dict[str, Any]:
+    try:
+        return json.loads(ALLOWED_SIZES_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        fail(f"未找到尺寸白名单：{ALLOWED_SIZES_PATH}")
+    except json.JSONDecodeError as exc:
+        fail(f"尺寸白名单 JSON 无效：{exc}")
+
+
+def allowed_size_inputs() -> set[str]:
+    catalog = load_allowed_sizes_catalog()
+    return {canonicalize_size_spec(item["input"]) for item in catalog.get("allowed", [])}
+
+
+def forbidden_size_hints() -> dict[str, dict[str, Any]]:
+    catalog = load_allowed_sizes_catalog()
+    hints: dict[str, dict[str, Any]] = {}
+    for item in catalog.get("forbidden", []):
+        key = canonicalize_size_spec(item["input"])
+        hints[key] = item
+    return hints
+
+
+def format_allowed_size_summary() -> str:
+    catalog = load_allowed_sizes_catalog()
+    parts: list[str] = []
+    for item in catalog.get("allowed", []):
+        label = item.get("note") or item["api_size"]
+        parts.append(f"`{item['input']}`（{label}）")
+    return "、".join(parts)
+
+
+def validate_allowed_size_spec(spec: str) -> None:
+    canonical = canonicalize_size_spec(spec)
+    if canonical in allowed_size_inputs():
+        return
+
+    forbidden = forbidden_size_hints().get(canonical)
+    if forbidden:
+        alternatives = "、".join(f"`{value}`" for value in forbidden.get("use_instead", []))
+        reason = forbidden.get("reason", "不在白名单")
+        fail(f"不要用 `{spec.strip()}`：{reason}。请改用：{alternatives}。")
+
+    fail(
+        f"不支持的 --size `{spec.strip()}`。请仅使用文档标注「要用」的格式："
+        f"{format_allowed_size_summary()}。"
+    )
 
 
 def validate_image_size(width: int, height: int) -> str | None:
@@ -148,6 +207,7 @@ def is_explicit_dimension(spec: str) -> bool:
 
 def normalize_image_size(spec: str) -> tuple[str, str | None, bool]:
     raw_spec = spec.strip()
+    validate_allowed_size_spec(raw_spec)
     if raw_spec.lower() == "auto":
         return "auto", None, False
 
@@ -193,8 +253,8 @@ def normalize_image_size(spec: str) -> tuple[str, str | None, bool]:
         return normalized, note, False
 
     fail(
-        "invalid image size. Use auto, WIDTHxHEIGHT, or WIDTH:HEIGHT "
-        "(examples: 3840x2160, 1792x1024, 9:16, 9:16@1k)"
+        f"无法解析 --size `{raw_spec}`。请仅使用文档标注「要用」的格式："
+        f"{format_allowed_size_summary()}。"
     )
 
 
@@ -244,7 +304,12 @@ def main() -> None:
     )
     parser.add_argument("--augment-prompt", action="store_true", help="Augment prompt for explicit WxH")
     parser.add_argument("--prompt", default="", help="Prompt text for --augment-prompt")
+    parser.add_argument("--list-allowed", action="store_true", help="Print allowed size catalog JSON")
     args = parser.parse_args()
+
+    if args.list_allowed:
+        print(json.dumps(load_allowed_sizes_catalog(), ensure_ascii=False, indent=2))
+        return
 
     if args.augment_prompt:
         if not args.spec:

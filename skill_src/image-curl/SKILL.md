@@ -42,6 +42,7 @@ description: 只要用户提出绘制、生成、创作、编辑、变换图片�
 **macOS / Linux（.sh）**
 
 - `bash`、`curl`、`python3`
+- **兼容 macOS 自带 Bash 3.2**（`/bin/bash`）：无需安装 Homebrew bash；脚本不使用 `local -n`、`mapfile`、`${var,,}` 等 Bash 4+ 语法
 
 **Windows（.ps1）**
 
@@ -54,25 +55,28 @@ description: 只要用户提出绘制、生成、创作、编辑、变换图片�
 - **Windows**：**优先使用 `.ps1` 脚本**，可直接在 PowerShell 中运行；仅当用户明确要求或 `.ps1` 不可用时，再退回 Git Bash / WSL 运行 `.sh`。
 - Windows skill 路径示例：`$env:USERPROFILE\.codex\skills\image-curl`
 - macOS skill 路径示例：`~/.codex/skills/image-curl`
+- **仓库内直跑**（开发、安装验证、未 cp 到 skill 目录）：`<仓库>/skill_src/image-curl/scripts/image-curl.sh`（Windows 为 `.ps1`）；`local.env` 放在 `skill_src/image-curl/local.env`
 
 ### 环境异常时 Agent 怎么处理
 
 1. **Windows + PowerShell**：默认调用 `image-curl.ps1` 或 `generate_image.ps1` / `edit_image.ps1`，参数格式与 `.sh` 相同。
 2. **找不到 curl.exe**：提示用户安装或启用 Windows 自带 `curl.exe`，不要用 `Invoke-WebRequest` 代替。
 3. **macOS / Linux 缺 bash/python3**：补齐依赖后再运行 `.sh`。
-4. **Permission denied（.sh）**：执行 `chmod +x scripts/*.sh`。
-5. **路径找不到**：使用当前 shell 能识别的绝对路径传 `--output` / `--image`。
-6. **API Key 已配置但仍报错**：检查 skill 目录下 `local.env` 是否存在，且包含 `IMAGE_CURL_API_KEY`。
+4. **macOS Bash 语法报错**（如 `local -n`、`mapfile`）：更新到本仓库最新版 skill 并重新安装；旧版脚本不兼容 `/bin/bash` 3.2。
+5. **Permission denied（.sh）**：执行 `chmod +x scripts/*.sh`。
+6. **路径找不到**：使用当前 shell 能识别的绝对路径传 `--output` / `--image`。
+7. **API Key 已配置但仍报错**：检查 skill 目录下 `local.env` 是否存在，且包含 `IMAGE_CURL_API_KEY`。
 
 ## 安装与 Key 配置（Agent 必读）
 
 当用户要求安装本 skill 并配置生图专用 Key 时，按以下步骤执行：
 
 1. 判断用户系统：Windows 优先用 `.ps1`，macOS / Linux 用 `.sh`。
-2. 克隆 `https://github.com/KonglingDaDa/URL-image`，将 `skill_src/image-curl` 复制到 skill 目录（Windows：`%USERPROFILE%\.codex\skills\image-curl`；macOS：`~/.codex/skills/image-curl`）。
-3. macOS / Linux：为 `scripts/*.sh` 执行 `chmod +x`。
-4. 复制 `local.env.example` 为 `local.env`，写入 `IMAGE_CURL_API_KEY=`；macOS / Linux 可执行 `chmod 600 local.env`。
-5. 运行 `image-curl.ps1 generate --dry-run` 或 `image-curl.sh generate --dry-run`（配合 `--prompt` 与 `--name`）验证配置，再执行一次真实生图测试。
+2. 克隆 `https://github.com/KonglingDaDa/URL-image`。
+3. **脚本路径**：若仍在仓库内做配置与验证，**直接使用** `<仓库绝对路径>/skill_src/image-curl/scripts/image-curl.sh`（勿写成 `~/.codex/skills/...`）。仅当用户明确要求「安装到 Codex」时，再将 `skill_src/image-curl` 复制到 skill 目录（Windows：`%USERPROFILE%\.codex\skills\image-curl`；macOS：`~/.codex/skills/image-curl`）。
+4. macOS / Linux：为 `scripts/*.sh` 执行 `chmod +x`。
+5. 在 **skill 根目录**（仓库内为 `skill_src/image-curl/`，安装后为 `~/.codex/skills/image-curl/`）复制 `local.env.example` 为 `local.env`，写入 `IMAGE_CURL_API_KEY=`；macOS / Linux 可执行 `chmod 600 local.env`。
+6. 用**上一步确定的脚本绝对路径**运行 `generate --dry-run`（配合 `--prompt` 与 `--name`）验证配置，再执行一次真实生图测试。沙箱若禁止写 `~/.codex`，脚本会自动回退到工作区 `./.image-curl-output/`，也可显式 `--output-dir` 指向仓库目录。
 
 **禁止**把生图专用 Key 写入：
 
@@ -93,7 +97,7 @@ description: 只要用户提出绘制、生成、创作、编辑、变换图片�
 - 默认 base URL：**`https://aicode.cat`**；可通过 `local.env` 中的 `IMAGE_CURL_BASE_URL` 或 `--base-url` 覆盖
 - 生图专用 API Key 路径：`~/.codex/skills/image-curl/local.env`（脚本启动时自动加载）
 - API Key 读取顺序：`local.env` → `--api-key` → 环境变量 → `auth.json`（后两者仅兜底，生图专用 Key 不要放那里）
-- 默认输出目录：`${CODEX_HOME:-~/.codex}/generated_images/<CODEX_THREAD_ID|CODEX_SESSION_ID|manual>/`
+- 默认输出目录（选首个可写）：`IMAGE_CURL_OUTPUT_DIR` → `${CODEX_HOME:-~/.codex}/generated_images` → `./.image-curl-output`，其下为 `<CODEX_THREAD_ID|CODEX_SESSION_ID|manual>/`
 
 ## 输出路径
 
@@ -110,43 +114,51 @@ description: 只要用户提出绘制、生成、创作、编辑、变换图片�
 
 ## 尺寸选择
 
-上游在 1K、2K、4K 输出档位内支持任意 `宽x高` 尺寸。支持比例与档位简写，由 `lib/normalize_size.py`（及 PowerShell `Resolve-ImageSize`）本地解析后传给 API。
+`--size` **只能**使用下文白名单（`scripts/lib/allowed_sizes.json`）。脚本会在发请求前校验；不在白名单的值会直接报错，并提示应改用的格式。
 
-已确认的上游约束：
+**Agent 必须遵守：只从「要用」列表中选值，绝不自行发明像素尺寸。**
 
-- 最长边不得超过 `3840`
-- 宽、高均须为 `16` 的倍数
-- 最大宽高比为 `3:1`
-- 总像素数须在 `[655360, 8294400]` 范围内
+### 要用（上游已实测通过）
 
-### 简写形式
+| `--size` 输入 | 发给上游 | 适用场景 |
+|---|---|---|
+| `1024x1024` | `1024x1024` | **默认**；用户未指定尺寸 |
+| `auto` | `auto` | 用户明确要求自适应尺寸 |
+| `1280x720` | `1280x720` | 720p 横版 |
+| `1k` | `1024x1024` | 1K 正方形 |
+| `2k` | `2048x2048` | 2K 正方形 |
+| `16:9` | `3840x2160` | 横版全尺寸 |
+| `9:16` | `2160x3840` | 竖版全尺寸 |
+| `1:1` | `2880x2880` | 正方形全尺寸 |
+| `3:1` | `3840x1280` | 超宽横版 |
+| `1:3` | `1280x3840` | 超高竖版 |
+| `9:16@1k` | `1008x1792` | 1K 竖版 |
+| `9:16@2k` | `2016x3584` | 2K 竖版 |
+| `1k@16:9` / `16:9@1k` | `1792x1008` | 1K 横版 |
+| `16:9@2k` | `3584x2016` | 2K 横版 |
+| `4k@16:9` / `16:9@4k` | `3840x2160` | 4K 横版 |
+| `4k@9:16` / `9:16@4k` | `2160x3840` | 4K 竖版 |
 
-除 `auto` 与 `宽x高` 外，还支持：
+### 不要用（会报错或易触发上游异常）
 
-- 比例：`16:9`、`9:16`、`1:1` 等 → 解析为档位内最大合法像素
-- 档位：`1k`、`2k`、`4k` → 正方形边长
-- 组合：`9:16@1k`、`9:16@2k`、`1k@16:9` 等
+| 不要用的输入 | 原因 | 请改用 |
+|---|---|---|
+| `4k`（单独） | 解析为 `4096x4096`，超过最长边 3840 | `4k@16:9`、`16:9@4k`、`4k@9:16`、`9:16@4k` |
+| `1920x1080` / `1080x1920` | 1080p 像素写法不在白名单 | `16:9` / `9:16` |
+| `1000x1800` | 非白名单像素尺寸 | `9:16@1k` / `9:16` |
+| `3840x2160` / `2160x3840` | 不要手写 4K 像素 | `16:9` / `9:16` 或 `4k@16:9` / `9:16@4k` |
+| `800x600` | 非白名单像素尺寸 | `16:9@1k` / `1k@16:9` |
+| `512x512` | 过小，不在白名单 | `1k` / `1024x1024` |
+| `4096x4096` | 超过最长边 3840 | `4k@16:9` / `16:9` / `2k` |
+| 任意其他 `宽x高` | 未实测，可能触发上游 500 | 上表中最接近的「要用」简写 |
 
-常见解析示例：
+### 选择规则
 
-| 输入 | 解析结果 |
-|---|---|
-| `16:9` | `3840x2160` |
-| `9:16` | `2160x3840` |
-| `9:16@1k` | `1008x1792` |
-| `9:16@2k` | `2016x3584` |
-| `2k` | `2048x2048` |
-
-显式 `宽x高`（如 `1000x1800`）原样发送，并在提示词末尾追加画布约束说明。
-
-选择规则：
-
-- 用户给出合法精确尺寸时，原样传入。
-- 用户给出不合法尺寸时，仅在满足约束所需的最小范围内调整，并尽量保留原意。
-- 用户只说明横竖版或画幅方向时，选择能保留该意图的尺寸，不要强行输出正方形。
-- 用户要求 1K、2K 或 4K 时，在该档位内选择尺寸，并保留所需宽高比。
-- 未指定尺寸、档位或方向时，使用 `1024x1024`。
-- 仅当用户明确要求自动、原比例或自适应尺寸时，才使用 `auto`。
+- 用户只说横版 → `16:9`；竖版 → `9:16`；正方形 → `1:1` 或 `1k`
+- 用户要 1K / 2K / 4K 并指定方向 → 用 `@` 组合（如 `9:16@2k`、`4k@16:9`），**不要**单独写 `4k`
+- 用户未指定尺寸 → `1024x1024`
+- 用户明确要求 auto / 自适应 → `auto`
+- 显式像素仅允许白名单中的 `1024x1024`、`1280x720`；其余场景一律用比例/档位简写
 
 ## 线程占位符与 `--image-set`（edit 专用）
 
@@ -190,19 +202,20 @@ rollout 类占位符与选择器需要 `CODEX_THREAD_ID` 或 `CODEX_SESSION_ID`�
 ## 统一入口命令
 
 ```bash
-# macOS / Linux
-~/.codex/skills/image-curl/scripts/image-curl.sh generate \
+# macOS / Linux — 将 SKILL_ROOT 换为仓库 skill_src/image-curl 或 ~/.codex/skills/image-curl
+SKILL_ROOT=/path/to/skill_src/image-curl
+"$SKILL_ROOT/scripts/image-curl.sh" generate \
   --prompt "一只可爱的猫咪" \
   --name cat \
   --size 16:9
 
-~/.codex/skills/image-curl/scripts/image-curl.sh edit \
+"$SKILL_ROOT/scripts/image-curl.sh" edit \
   --image '[Last Output]' \
   --image '[Image #1]' \
   --prompt "在上次结果基础上融合新参考图的风格" \
   --name refined
 
-~/.codex/skills/image-curl/scripts/image-curl.sh generate-batch \
+"$SKILL_ROOT/scripts/image-curl.sh" generate-batch \
   --input ./prompts.jsonl \
   --output-dir ./batch-out
 ```
@@ -304,7 +317,7 @@ $image-curl image="[Last Output]" image="[Image #1]" prompt="融合风格" name=
 
 图生图另支持：`image`（可重复）、`image_set`、`mask`、`input_fidelity`。
 
-`size` 可为 `auto`、`宽x高`、比例简写（如 `16:9`、`9:16@2k`）或档位（如 `2k`）。`count` / `n` 对应 API 的 `n` 参数。若上游接受但忽略 `n`，脚本会输出 `requested_count` 与 `returned_count`。
+`size` 只能填白名单值（见上文「要用」表；完整列表 `scripts/lib/allowed_sizes.json`）。`count` / `n` 对应 API 的 `n` 参数。若上游接受但忽略 `n`，脚本会输出 `requested_count` 与 `returned_count`。
 
 实用选项：
 

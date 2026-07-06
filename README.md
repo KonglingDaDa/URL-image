@@ -58,6 +58,8 @@
 ### macOS
 
 - 使用 `.sh` 脚本，skill 路径：`~/.codex/skills/image-curl/`
+- **兼容 macOS 自带 Bash 3.2**（`/bin/bash`）：脚本不依赖 Bash 4+ 的 `local -n`、`mapfile`、`${var,,}` 等语法，安装后无需额外安装新版 Bash 或 Homebrew bash
+- 依赖：`bash`、`curl`、`python3`（系统自带或 Xcode Command Line Tools 即可）
 
 ```bash
 bash --version && curl --version && python3 --version
@@ -110,7 +112,14 @@ IMAGE_CURL_BASE_URL=https://aicode.cat
 
 **禁止写入** `~/.codex/auth.json`、`~/.codex/config.toml`、`~/.claude/settings.json` 或任何全局配置。
 
-验证配置：
+验证配置（**仓库内**可直接用 `skill_src/image-curl/scripts/`，无需先 cp 到 `~/.codex/skills`）：
+
+```bash
+./skill_src/image-curl/scripts/image-curl.sh generate \
+  --prompt "测试" --name test --dry-run
+```
+
+已安装到 Codex 后：
 
 ```bash
 ~/.codex/skills/image-curl/scripts/image-curl.sh generate \
@@ -121,6 +130,8 @@ IMAGE_CURL_BASE_URL=https://aicode.cat
 & "$env:USERPROFILE\.codex\skills\image-curl\scripts\image-curl.ps1" generate `
   --prompt "测试" --name test --dry-run
 ```
+
+沙箱禁止写 `~/.codex` 时，脚本会自动把仅 `--name` 的输出落到工作区 `./.image-curl-output/`；也可设置 `IMAGE_CURL_OUTPUT_DIR` 或传 `--output-dir`。
 
 确认 `authorization` 为 `Bearer ***` 且 `endpoint` 指向 `https://aicode.cat` 后，再执行真实生图。
 

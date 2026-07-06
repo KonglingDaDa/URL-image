@@ -23,6 +23,45 @@ die() {
   exit 1
 }
 
+# Bash 3.2 compatible lowercase (macOS ships /bin/bash 3.2).
+to_lower() {
+  printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]'
+}
+
+# Sets a scalar variable by name (Bash 3.2 replacement for local -n namerefs).
+assign_var_by_name() {
+  local var_name="${1:?}"
+  local value="${2-}"
+  eval "$var_name=\"\$value\""
+}
+
+# Reads newline-delimited stdout from CMD into the array variable named VAR_NAME.
+# Bash 3.2 replacement for mapfile/readarray.
+read_lines_into_array() {
+  local var_name="${1:?}"
+  shift
+  local -a _lines=()
+  local _line
+  while IFS= read -r _line || [[ -n "${_line:-}" ]]; do
+    _lines+=("$_line")
+  done < <("$@")
+  eval "$var_name=(\"\${_lines[@]}\")"
+}
+
+# Encode a Bash string array as a JSON array. Safe for empty arrays under Bash 3.2 + set -u.
+# Usage: bash_array_to_json [ITEM ...]
+bash_array_to_json() {
+  local -a items=()
+  if (($# > 0)); then
+    items=("$@")
+  fi
+  if ((${#items[@]} == 0)); then
+    printf '[]'
+    return 0
+  fi
+  printf '%s\n' "${items[@]}" | python3 -c 'import json,sys; print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))'
+}
+
 get_full_path() {
   local path="${1:?}"
   python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$path"
@@ -140,10 +179,14 @@ get_thread_id() {
   fi
 }
 
-# Default: ${CODEX_HOME:-~/.codex}/generated_images/<thread_id|manual>/
+# Default output base (first writable candidate):
+#   1. $IMAGE_CURL_OUTPUT_DIR/<thread_id|manual>/
+#   2. ${CODEX_HOME:-~/.codex}/generated_images/<thread_id|manual>/
+#   3. ./.image-curl-output/<thread_id|manual>/  (sandbox / read-only CODEX_HOME fallback)
 get_default_output_dir() {
   python3 - <<'PY'
 import os
+import tempfile
 from pathlib import Path
 
 def sanitize_path_segment(value):
@@ -153,13 +196,38 @@ def sanitize_path_segment(value):
     )
     return sanitized or "generated_image"
 
-codex_home = Path(os.environ.get("CODEX_HOME", "") or Path.home() / ".codex").expanduser()
+def is_writable_dir(path: Path) -> bool:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=path, delete=True):
+            pass
+        return True
+    except OSError:
+        return False
+
 thread_id = (
     os.environ.get("CODEX_THREAD_ID")
     or os.environ.get("CODEX_SESSION_ID")
     or "manual"
 ).strip() or "manual"
-print(codex_home / "generated_images" / sanitize_path_segment(thread_id))
+segment = sanitize_path_segment(thread_id)
+
+candidates = []
+override = (os.environ.get("IMAGE_CURL_OUTPUT_DIR") or "").strip()
+if override:
+    candidates.append(Path(override).expanduser())
+codex_home = Path(os.environ.get("CODEX_HOME", "") or Path.home() / ".codex").expanduser()
+candidates.append(codex_home / "generated_images")
+candidates.append(Path.cwd() / ".image-curl-output")
+
+chosen = None
+for base in candidates:
+    target = base / segment
+    if is_writable_dir(target):
+        chosen = target
+        break
+
+print(chosen or (candidates[-1] / segment))
 PY
 }
 
@@ -213,15 +281,14 @@ else:
 PY
 }
 
-# Populates the nameref array with one or more absolute output paths (true bash array).
+# Populates the array variable named by $4 with one or more absolute output paths.
 get_output_targets() {
   local output_path="$1"
   local format="$2"
   local count="$3"
-  local -n _targets_ref="$4"
+  local var_targets="${4:?}"
 
-  local -a _lines=()
-  mapfile -t _lines < <(python3 - "$output_path" "$format" "$count" <<'PY'
+  read_lines_into_array "$var_targets" python3 - "$output_path" "$format" "$count" <<'PY'
 import sys
 from pathlib import Path
 
@@ -237,8 +304,6 @@ else:
     for index in range(1, count + 1):
         print(output.with_name(f"{stem}-{index}{suffix}"))
 PY
-)
-  _targets_ref=("${_lines[@]}")
 }
 
 assert_output_targets_available() {
@@ -265,12 +330,20 @@ assert_output_targets_available() {
   fi
 }
 
-resolve_size() {
+_normalize_size_result() {
   local raw_spec="${1:?}"
-  local -n _api_size_ref="${2:?}"
-  local -n _note_ref="${3:?}"
-  local -n _explicit_ref="${4:?}"
+  local var_api_size="${2:?}"
+  local var_size_note="${3:?}"
+  local var_explicit="${4:?}"
+  local result="${5:?}"
 
+  assign_var_by_name "$var_api_size" "$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["api_size"])' "$result")"
+  assign_var_by_name "$var_size_note" "$(python3 -c 'import json,sys; v=json.loads(sys.argv[1]).get("size_note"); print(v if v else "")' "$result")"
+  assign_var_by_name "$var_explicit" "$(python3 -c 'import json,sys; print("1" if json.loads(sys.argv[1])["is_explicit_dimension"] else "0")' "$result")"
+}
+
+_run_normalize_size() {
+  local raw_spec="${1:?}"
   local script_dir
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   local normalize_py="${script_dir}/lib/normalize_size.py"
@@ -282,13 +355,51 @@ resolve_size() {
     local err
     err="$(<"$stderr_file")"
     rm -f "$stderr_file"
-    die "${err:-无法解析尺寸：$raw_spec}"
+    printf '%s\n' "${err:-无法解析尺寸：$raw_spec}" >&2
+    return 1
   fi
   rm -f "$stderr_file"
+  printf '%s' "$result"
+}
 
-  _api_size_ref="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["api_size"])' "$result")"
-  _note_ref="$(python3 -c 'import json,sys; v=json.loads(sys.argv[1]).get("size_note"); print(v if v else "")' "$result")"
-  _explicit_ref="$(python3 -c 'import json,sys; print("1" if json.loads(sys.argv[1])["is_explicit_dimension"] else "0")' "$result")"
+# Like resolve_size but returns 1 instead of die (for batch job error aggregation).
+try_resolve_size() {
+  local raw_spec="${1:?}"
+  local var_api_size="${2:?}"
+  local var_size_note="${3:?}"
+  local var_explicit="${4:?}"
+  local result
+
+  if ! result="$(_run_normalize_size "$raw_spec")"; then
+    return 1
+  fi
+  _normalize_size_result "$raw_spec" "$var_api_size" "$var_size_note" "$var_explicit" "$result"
+}
+
+resolve_size() {
+  local raw_spec="${1:?}"
+  local var_api_size="${2:?}"
+  local var_size_note="${3:?}"
+  local var_explicit="${4:?}"
+  local result
+
+  if ! result="$(_run_normalize_size "$raw_spec")"; then
+    exit 1
+  fi
+  _normalize_size_result "$raw_spec" "$var_api_size" "$var_size_note" "$var_explicit" "$result"
+}
+
+# Writes {"api_size","size_note","is_explicit_dimension"} JSON to $2; returns 1 on error.
+write_resolve_size_meta() {
+  local raw_spec="${1:?}"
+  local out_file="${2:?}"
+  local api_size="" size_note="" is_explicit_dimension=0
+
+  if ! try_resolve_size "$raw_spec" api_size size_note is_explicit_dimension; then
+    return 1
+  fi
+  python3 -c 'import json,sys; print(json.dumps({"api_size":sys.argv[1],"size_note":sys.argv[2],"is_explicit_dimension":sys.argv[3]}, ensure_ascii=False))' \
+    "$api_size" "$size_note" "$is_explicit_dimension" >"$out_file"
 }
 
 augment_prompt_for_size() {
@@ -298,29 +409,6 @@ augment_prompt_for_size() {
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   local normalize_py="${script_dir}/lib/normalize_size.py"
   python3 "$normalize_py" --augment-prompt --prompt "$prompt" "$raw_spec"
-}
-
-test_image_size() {
-  local size="${1,,}"
-  if [[ "$size" == "auto" ]]; then
-    return 0
-  fi
-  [[ "$size" =~ ^([1-9][0-9]*)x([1-9][0-9]*)$ ]] || die "--size 须为 auto 或 宽x高，例如 1024x1024、1344x768、2048x1152。"
-  local width="${BASH_REMATCH[1]}"
-  local height="${BASH_REMATCH[2]}"
-  local pixel_count=$(( width * height ))
-  if (( width > 3840 || height > 3840 )); then
-    die "--size '$size' 不受上游支持：最长边不得超过 3840。"
-  fi
-  if (( width % 16 != 0 || height % 16 != 0 )); then
-    die "--size '$size' 不受上游支持：宽和高均须为 16 的倍数。"
-  fi
-  if (( width > height * 3 || height > width * 3 )); then
-    die "--size '$size' 不受上游支持：最大宽高比为 3:1。"
-  fi
-  if (( pixel_count < 655360 || pixel_count > 8294400 )); then
-    die "--size '$size' 不受上游支持：总像素数须在 655360 至 8294400 之间。"
-  fi
 }
 
 # Requires python3 or py -3. Exits with Chinese error when Python is missing.
@@ -359,14 +447,16 @@ resolve_image_refs() {
 
   # Use stdin JSON to avoid shell '#' truncation in placeholders like [Last Output #2].
   local selectors_json images_json payload
-  selectors_json="$(printf '%s\n' "${selectors[@]}" | python3 -c 'import json,sys; print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))')"
-  images_json="$(printf '%s\n' "${images[@]}" | python3 -c 'import json,sys; print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))')"
+  selectors_json="$(bash_array_to_json ${selectors+"${selectors[@]}"})"
+  images_json="$(bash_array_to_json ${images+"${images[@]}"})"
   payload="$(python3 -c 'import json,sys; print(json.dumps({"thread_id":sys.argv[1],"image_sets":json.loads(sys.argv[2]),"images":json.loads(sys.argv[3])}, ensure_ascii=False))' "$thread_id" "$selectors_json" "$images_json")"
   local request_file
   request_file="$(mktemp "${TMPDIR:-/tmp}/image-curl-resolve-req.XXXXXX.json")"
   printf '%s' "$payload" >"$request_file"
-  invoke_thread_state resolve --request-file "$request_file"
+  local status=0
+  invoke_thread_state resolve --request-file "$request_file" || status=$?
   rm -f "$request_file"
+  return "$status"
 }
 
 # Persist active_image_set.json / last_output_set.json for a thread.
@@ -419,8 +509,10 @@ import sys
 data = json.loads(sys.argv[1])
 if isinstance(data.get("saved_files"), list):
     for item in data["saved_files"]:
-        if isinstance(item, dict) and item.get("file"):
-            print(item["file"])
+        if isinstance(item, dict):
+            path = item.get("file") or item.get("path")
+            if path:
+                print(path)
         elif isinstance(item, str):
             print(item)
 elif data.get("saved_file"):

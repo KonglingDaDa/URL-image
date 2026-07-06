@@ -6,10 +6,13 @@ interface:
     默认 base URL 为 https://aicode.cat；生图专用 API Key 只写入 skill 目录 local.env，禁止写入
     ~/.codex/auth.json 或 ~/.claude/settings.json。
     Windows 用 image-curl.ps1 / generate_image.ps1 / edit_image.ps1；macOS/Linux 用 .sh 对应脚本。
+    脚本路径：若工作区有 skill_src/image-curl/scripts/，必须用该仓库绝对路径，勿硬编码 ~/.codex/skills/...；
+    仅安装到 Codex 后才用 ~/.codex/skills/image-curl/scripts/。
     统一入口子命令：generate（文生图）、edit（图生图）、generate-batch（JSONL 批量）。
-    输出可用 --output、--output-dir、--name；未指定时默认写入
-    ~/.codex/generated_images/<thread|manual>/。
-    尺寸支持 16:9、9:16@2k、2k 等简写。edit 复用历史图须显式 --image 占位符（如 [Last Output]、[Image #N]）
+    输出可用 --output、--output-dir、--name；仅 --name 时默认目录优先 IMAGE_CURL_OUTPUT_DIR，
+    其次 ~/.codex/generated_images/<thread|manual>/，沙箱不可写时自动回退 ./.image-curl-output/。
+    --size 仅允许白名单（scripts/lib/allowed_sizes.json / SKILL.md「要用」）；不要用 4k、1920x1080 等。
+    要用：16:9、9:16@2k、2k、4k@16:9 等；edit 复用历史图须显式 --image 占位符（如 [Last Output]、[Image #N]）
     或 --image-set（active、last-output、latest-turn 等）；支持 --mask 与 --input-fidelity。
     模型需要看到真实图片时用 edit，不要用 generate。
 

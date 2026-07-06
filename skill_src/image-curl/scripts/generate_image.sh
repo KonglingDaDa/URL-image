@@ -19,8 +19,8 @@ usage() {
   --name PREFIX         可读文件名前缀，默认 generated；未指定 --output-dir 时写入
                         ${CODEX_HOME:-~/.codex}/generated_images/<thread|manual>/
   --model NAME          图片模型，默认：gpt-image-2
-  --size SIZE           auto、宽x高、宽:高 或 tier 简写（如 16:9、9:16@1k、2k、4k）
-                        解析后须满足：边长为 16 的倍数，最长边 <=3840，宽高比 <=3:1
+  --size SIZE           仅允许白名单（见 scripts/lib/allowed_sizes.json / SKILL.md「要用」）
+                        例：1024x1024、16:9、9:16@2k、4k@16:9；不要用 4k、1920x1080 等
   --quality VALUE       默认：auto
   --format FORMAT       png、jpeg 或 webp，默认：png
   --output-compression N
@@ -99,8 +99,7 @@ api_size=""
 size_note=""
 is_explicit_dimension=0
 resolve_size "$requested_size" api_size size_note is_explicit_dimension
-test_image_size "$api_size"
-size="${api_size,,}"
+size="$(to_lower "$api_size")"
 [[ "$format" =~ ^(png|jpeg|jpg|webp)$ ]] || die "--format 须为 png、jpeg、jpg 或 webp。"
 if [[ "$format" == "jpg" ]]; then
   format="jpeg"
@@ -223,8 +222,7 @@ curl -sS --fail-with-body -X POST "$endpoint" \
 
 result_json="$(save_image_response "$response_file" "$output" "$metadata" "$format" "$count")"
 thread_id="$(get_thread_id)"
-saved_paths=()
-mapfile -t saved_paths < <(extract_saved_paths_from_result "$result_json")
+read_lines_into_array saved_paths extract_saved_paths_from_result "$result_json"
 if ((${#saved_paths[@]} > 0)); then
   save_thread_state "$thread_id" --last-output "${saved_paths[@]}"
 fi

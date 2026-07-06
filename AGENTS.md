@@ -30,10 +30,14 @@
 
 可直接调用子脚本（`generate_image.*`、`edit_image.*`、`generate_batch.*`），参数与统一入口一致。
 
-路径示例：
+脚本路径（Agent 必须按实际环境选择，**不要**在仓库内硬编码 `~/.codex/skills/...`）：
 
-- macOS：`~/.codex/skills/image-curl/scripts/image-curl.sh`
-- Windows：`%USERPROFILE%\.codex\skills\image-curl\scripts\image-curl.ps1`
+| 场景 | macOS / Linux | Windows |
+|---|---|---|
+| **仓库内开发 / 安装验证**（未 cp 到 skill 目录） | `<仓库绝对路径>/skill_src/image-curl/scripts/image-curl.sh` | `<仓库>\skill_src\image-curl\scripts\image-curl.ps1` |
+| **已安装到 Codex skill 目录** | `~/.codex/skills/image-curl/scripts/image-curl.sh` | `%USERPROFILE%\.codex\skills\image-curl\scripts\image-curl.ps1` |
+
+判定顺序：若当前工作区存在 `skill_src/image-curl/scripts/image-curl.sh`（或 `.ps1`），**优先用仓库内脚本**；`local.env` 写在同目录的上一级 `skill_src/image-curl/local.env`。仅当用户明确要求「安装到 Codex」或仓库内不存在 skill 时，再 `cp -R` 到 `~/.codex/skills/image-curl`。
 
 ## 配置与 Key
 
@@ -57,15 +61,28 @@
 ## 输出路径策略
 
 1. 用户给了明确路径 → `--output`
-2. 用户只要文件名或语义名 → `--name`（写入 `~/.codex/generated_images/<thread|manual>/`）
+2. 用户只要文件名或语义名 → `--name`（默认目录见下）
 3. 批量或多文件到指定目录 → `--output-dir` + `--name`
 4. 三者都不给 → 脚本报错，Agent 应补 `--name` 或 `--output`
 
+**默认输出目录**（仅 `--name`、无 `--output-dir` 时）：按优先级选**首个可写**路径：
+
+1. `local.env` 或环境中的 `IMAGE_CURL_OUTPUT_DIR/<thread|manual>/`
+2. `${CODEX_HOME:-~/.codex}/generated_images/<thread|manual>/`
+3. `./.image-curl-output/<thread|manual>/`（沙箱禁止写 `~/.codex` 时的自动回退）
+
+沙箱 / 只读 home 下做 dry-run 或真实生图时，若未指定 `--output`，脚本会自动落到工作区 `.image-curl-output/`；也可显式 `--output-dir ./generated` 指向仓库或工作区。
+
 ## 尺寸
 
-- 支持 `auto`、`宽x高`、比例（`16:9`）、档位（`2k`）、组合（`9:16@2k`）
-- 不合法尺寸做最小调整以满足上游约束（最长边 ≤3840、16 倍数、宽高比 ≤3:1、像素范围）
-- 用户只说横版/竖版/1K/2K/4K 时，选合适简写，不要强行正方形
+`--size` **只能**用白名单（`scripts/lib/allowed_sizes.json`）。详见 `SKILL.md`「要用 / 不要用」。
+
+**要用**：`1024x1024`（默认）、`auto`、`1280x720`、`1k`、`2k`、`16:9`、`9:16`、`1:1`、`3:1`、`1:3`、`9:16@1k`、`9:16@2k`、`1k@16:9`、`16:9@1k`、`16:9@2k`、`4k@16:9`、`16:9@4k`、`4k@9:16`、`9:16@4k`
+
+**不要用**：单独 `4k`、`1920x1080`、`1080x1920`、`1000x1800`、`3840x2160`、`2160x3840`、`800x600`、`512x512`、`4096x4096`、任意其他手写 `宽x高`
+
+- 用户说横版 → `16:9`；竖版 → `9:16`；要 4K → `4k@16:9` / `9:16@4k`（**不要**单独写 `4k`）
+- 未指定尺寸 → `1024x1024`
 
 ## 错误处理
 
@@ -82,9 +99,12 @@
 | 缺少 `b64_json` | 上报响应 JSON 结构异常 |
 | Windows 找不到 `curl` | 提示启用系统 `curl.exe`，不用 `Invoke-WebRequest` |
 | `.sh` Permission denied | `chmod +x scripts/*.sh` |
+| macOS `local -n` / `mapfile` / 语法错误 | 仓库脚本已兼容 Bash 3.2；请更新到最新 skill 并重新 `cp -R` 安装 |
+| `unbound variable` / 空数组（仅 `--image`、无 `--image-set`） | 更新到最新版 `common.sh` / `edit_image.sh`；勿在客户环境手改兼容补丁 |
+| dry-run 在 `~/.codex/generated_images` 建目录失败 | 沙箱限制；用仓库内脚本 + 自动回退 `.image-curl-output`，或 `--output-dir` 指向工作区 |
 | `generate` 收到 `--image` | 改用 `edit` |
 | `requested_count` ≠ `returned_count` | 上游忽略 `n`；告知用户实际返回张数 |
-| 尺寸校验失败 | 建议合法简写（如 `16:9`）或合规 `宽x高` |
+| 尺寸校验失败 / `不要用` / `不支持的 --size` | 从 SKILL.md「要用」表选值；1080p 用 `16:9`/`9:16`，4K 用 `4k@16:9` 等 |
 
 失败时保留命令输出中的错误正文，不要泄露完整 Bearer Token 或 base64 图片。
 
@@ -93,8 +113,16 @@
 ```bash
 bash skill_src/image-curl/scripts/image-curl.sh help
 bash skill_src/image-curl/scripts/generate_image.sh --dry-run --prompt "测试" --name t
+bash skill_src/image-curl/tests/run_bash_compat_check.sh
+bash skill_src/image-curl/tests/run_dry_run_no_key.sh
+bash skill_src/image-curl/tests/run_batch_dry_run_no_key.sh
+bash skill_src/image-curl/tests/run_saved_files_schema_tests.sh
 bash skill_src/image-curl/tests/run_size_tests.sh
+bash skill_src/image-curl/tests/run_allowed_size_tests.sh
 bash skill_src/image-curl/tests/run_thread_state_tests.sh
+bash skill_src/image-curl/tests/run_batch_aggregate_tests.sh
+bash skill_src/image-curl/tests/run_edit_dry_run_fixture.sh
+bash skill_src/image-curl/tests/run_default_output_dir_tests.sh
 ```
 
 Windows：
@@ -102,7 +130,9 @@ Windows：
 ```powershell
 & skill_src/image-curl/scripts/image-curl.ps1 help
 & skill_src/image-curl/tests/run_size_tests.ps1
+& skill_src/image-curl/tests/run_allowed_size_tests.ps1
 & skill_src/image-curl/tests/run_thread_state_tests.ps1
+& skill_src/image-curl/tests/run_saved_files_schema_tests.ps1
 ```
 
 ## 仓库结构（维护者）

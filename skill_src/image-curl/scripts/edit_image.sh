@@ -22,8 +22,8 @@ usage() {
   --image-set SELECTOR  图片集选择器，可重复：active、last-output、latest-turn、
                         turn:-K、thread:1,2,5（edit 不隐式继承线程状态，须显式指定）
   --model NAME          图片模型，默认：gpt-image-2
-  --size SIZE           auto、宽x高、宽:高 或 tier 简写（如 16:9、9:16@1k、2k、4k）
-                        解析后须满足：边长为 16 的倍数，最长边 <=3840，宽高比 <=3:1
+  --size SIZE           仅允许白名单（见 scripts/lib/allowed_sizes.json / SKILL.md「要用」）
+                        例：1024x1024、16:9、9:16@2k、4k@16:9；不要用 4k、1920x1080 等
   --quality VALUE       默认：auto
   --format FORMAT       png、jpeg 或 webp，默认：png
   --output-compression N
@@ -107,8 +107,7 @@ api_size=""
 size_note=""
 is_explicit_dimension=0
 resolve_size "$requested_size" api_size size_note is_explicit_dimension
-test_image_size "$api_size"
-size="${api_size,,}"
+size="$(to_lower "$api_size")"
 [[ "$format" =~ ^(png|jpeg|jpg|webp)$ ]] || die "--format 须为 png、jpeg、jpg 或 webp。"
 if [[ "$format" == "jpg" ]]; then
   format="jpeg"
@@ -146,8 +145,8 @@ done
 for image in "${images[@]}"; do
   resolve_refs_args+=(--image "$image")
 done
-resolved_images_json="$(resolve_image_refs "$thread_id" "${resolve_refs_args[@]}")"
-mapfile -t resolved_images < <(python3 -c 'import json,sys; [print(p) for p in json.loads(sys.stdin.read())]' <<<"$resolved_images_json")
+resolved_images_json="$(resolve_image_refs "$thread_id" ${resolve_refs_args+"${resolve_refs_args[@]}"})"
+read_lines_into_array resolved_images python3 -c 'import json,sys; [print(p) for p in json.loads(sys.argv[1])]' "$resolved_images_json"
 ((${#resolved_images[@]} > 0)) || die "未能解析任何输入图片。"
 
 resolved_mask=""
@@ -192,11 +191,13 @@ if [[ "$dry_run" -eq 1 ]]; then
   if [[ -n "$resolved_mask" ]]; then
     json_mask="$(normalize_path_for_json "$resolved_mask")"
   fi
-  python3 - "$endpoint" "$model" "$prompt" "$size" "$quality" "$format" "$output_compression" "$moderation" "$count" "$json_output" "$metadata" "$size_note" "$json_mask" "$input_fidelity" "${curl_images[@]}" <<'PY'
+  curl_images_json="$(bash_array_to_json ${curl_images+"${curl_images[@]}"})"
+  python3 - "$endpoint" "$model" "$prompt" "$size" "$quality" "$format" "$output_compression" "$moderation" "$count" "$json_output" "$metadata" "$size_note" "$json_mask" "$input_fidelity" "$curl_images_json" <<'PY'
 import json
 import sys
 
-endpoint, model, prompt, size, quality, output_format, output_compression, moderation, count, output, metadata, size_note, mask, input_fidelity, *images = sys.argv[1:]
+endpoint, model, prompt, size, quality, output_format, output_compression, moderation, count, output, metadata, size_note, mask, input_fidelity, images_json = sys.argv[1:]
+images = json.loads(images_json) if images_json else []
 
 def normalize_path(value):
     if isinstance(value, str) and (len(value) >= 2 and value[1] == ":" or value.startswith("\\\\")):
@@ -276,8 +277,7 @@ fi
 curl "${curl_args[@]}" > "$response_file"
 
 result_json="$(save_image_response "$response_file" "$output" "$metadata" "$format" "$count")"
-saved_paths=()
-mapfile -t saved_paths < <(extract_saved_paths_from_result "$result_json")
+read_lines_into_array saved_paths extract_saved_paths_from_result "$result_json"
 if ((${#saved_paths[@]} > 0)); then
   save_thread_state "$thread_id" --active-input "${resolved_images[@]}" --last-output "${saved_paths[@]}"
 else
