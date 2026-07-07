@@ -11,8 +11,9 @@ interface:
     统一入口子命令：generate（文生图）、edit（图生图）、generate-batch（JSONL 批量）。
     输出可用 --output、--output-dir、--name；仅 --name 时默认目录优先 IMAGE_CURL_OUTPUT_DIR，
     其次 ~/.codex/generated_images/<thread|manual>/，沙箱不可写时自动回退 ./.image-curl-output/。
-    --size 仅允许白名单（scripts/lib/allowed_sizes.json / SKILL.md「要用」）；不要用 4k、1920x1080 等。
-    要用：16:9、9:16@2k、2k、4k@16:9 等；edit 复用历史图须显式 --image 占位符（如 [Last Output]、[Image #N]）
+    --size 仅允许白名单（scripts/lib/allowed_sizes.json、SKILL.md「要用/不要用」）；不要用 4k、1920x1080、1000x1800、
+    800x600、4096x4096、512x512 等。要用：16:9、9:16@2k、2k、4k@16:9 等。Windows 亦需 python3（尺寸/线程/批量）。
+    edit 复用历史图须显式 --image 占位符（如 [Last Output]、[Image #N]）
     或 --image-set（active、last-output、latest-turn 等）；支持 --mask 与 --input-fidelity。
     模型需要看到真实图片时用 edit，不要用 generate。
 

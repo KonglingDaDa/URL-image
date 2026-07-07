@@ -164,12 +164,16 @@ Windows：
 
 ```powershell
 & skill_src/image-curl/scripts/image-curl.ps1 help
+& skill_src/image-curl/tests/run_dry_run_no_key.ps1
+& skill_src/image-curl/tests/run_edit_dry_run_fixture.ps1
 & skill_src/image-curl/tests/run_size_tests.ps1
 & skill_src/image-curl/tests/run_allowed_size_tests.ps1
 & skill_src/image-curl/tests/run_thread_state_tests.ps1
 & skill_src/image-curl/tests/run_saved_files_schema_tests.ps1
 & skill_src/image-curl/tests/run_catalog_consistency_tests.ps1
 ```
+
+仅 bash、尚无 PS 对应：`run_bash_compat_check`、`run_batch_dry_run_no_key`、`run_batch_aggregate_tests`、`run_default_output_dir_tests`。
 
 ## 仓库结构（维护者）
 
