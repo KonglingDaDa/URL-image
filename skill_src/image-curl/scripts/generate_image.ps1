@@ -14,8 +14,9 @@ function Show-GenerateUsage {
 选项：
   --output FILE         输出文件路径（优先于 --output-dir/--name）
   --output-dir DIR      输出目录；与 --name 组合生成「前缀-随机后缀」文件名
-  --name PREFIX         可读文件名前缀，默认 generated；未指定 --output-dir 时写入
-                        ${CODEX_HOME:-~/.codex}/generated_images/<thread|manual>/
+  --name PREFIX         可读文件名前缀，默认 generated；未指定 --output-dir 时写入默认目录
+                        （IMAGE_CURL_OUTPUT_DIR → ~/.codex/generated_images → ./.image-curl-output 回退）
+                        其下为 <thread|manual>/
   --model NAME          图片模型，默认：gpt-image-2
   --size SIZE           仅允许白名单（见 scripts/lib/allowed_sizes.json / SKILL.md「要用」）
                         例：1024x1024、16:9、9:16@2k、4k@16:9；不要用 4k、1920x1080 等

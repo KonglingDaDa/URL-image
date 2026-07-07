@@ -132,35 +132,45 @@ function Resolve-ImageSize {
     }
 }
 
-function Get-PromptSizeConstraint {
-    param([string]$Size)
-    if ($Size -notmatch '^\s*(\d+)\s*[xX×]\s*(\d+)\s*$') { return $null }
-    $width = [int]$Matches[1]
-    $height = [int]$Matches[2]
-    if ($width -eq $height) {
-        $orientation = 'square'
-    } elseif ($width -gt $height) {
-        $orientation = 'landscape'
-    } else {
-        $orientation = 'portrait'
-    }
-    return "Final output constraint: compose for an exact ${width}x${height} pixel ${orientation} canvas. The generated image should visually match that final canvas size and aspect ratio; do not imply a different resolution, crop, border, or padding."
-}
-
 function Add-PromptSizeConstraint {
     param(
         [string]$Prompt,
         [string]$RawSpec,
         [string]$ApiSize
     )
-    if ($RawSpec -notmatch '^\s*(\d+)\s*[xX×]\s*(\d+)\s*$') {
-        return $Prompt
+    $null = $ApiSize
+
+    $normalizePy = Join-Path $script:ImageCurlScriptDir 'lib/normalize_size.py'
+    if (-not (Test-Path -LiteralPath $normalizePy)) {
+        Write-ImageCurlError "未找到尺寸解析脚本：$normalizePy"
     }
-    $constraint = Get-PromptSizeConstraint -Size $ApiSize
-    if (-not $constraint -or $Prompt.Contains($constraint)) {
-        return $Prompt
+
+    $python = Get-ThreadStatePython
+    $stderrFile = [System.IO.Path]::GetTempFileName()
+    try {
+        $stdout = & $python.Exe @(
+            $python.Prefix + $normalizePy,
+            '--augment-prompt',
+            '--prompt', $Prompt,
+            $RawSpec.Trim()
+        ) 2>$stderrFile
+        if ($LASTEXITCODE -ne 0) {
+            $message = ''
+            if (Test-Path -LiteralPath $stderrFile) {
+                $message = (Get-Content -LiteralPath $stderrFile -Raw -Encoding UTF8 -ErrorAction SilentlyContinue).Trim()
+            }
+            if (-not $message) {
+                $message = "无法为尺寸追加提示词约束：$($RawSpec.Trim())"
+            }
+            Write-ImageCurlError $message
+        }
+
+        return (($stdout | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] }) -join "`n")
+    } finally {
+        if ($stderrFile -and (Test-Path -LiteralPath $stderrFile)) {
+            Remove-Item -LiteralPath $stderrFile -Force -ErrorAction SilentlyContinue
+        }
     }
-    return ($Prompt.TrimEnd() + "`n`n" + $constraint)
 }
 
 function Test-InputFidelity {

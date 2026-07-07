@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 skill_root="$(cd "$script_dir/.." && pwd)"
 allowed_json="${skill_root}/scripts/lib/allowed_sizes.json"
-fixtures_json="${script_dir}/size_fixtures.json"
+normalize_py="${skill_root}/scripts/lib/normalize_size.py"
 gen="${skill_root}/scripts/generate_image.sh"
 PYTHON_BIN="${PYTHON:-python3}"
 
@@ -48,21 +48,18 @@ else
   printf 'OK   forbidden: %s\n' "$forbidden_extra"
 fi
 
-missing_inputs="$("$PYTHON_BIN" -c '
-import json, sys
-
-catalog = json.load(open(sys.argv[1], encoding="utf-8"))
-fixtures = json.load(open(sys.argv[2], encoding="utf-8"))
-catalog_inputs = {item["input"] for item in catalog["allowed"]}
-fixture_inputs = {item["input"] for item in fixtures}
-missing = sorted(catalog_inputs - fixture_inputs)
-if missing:
-    print(",".join(missing))
-' "$allowed_json" "$fixtures_json")"
-if [[ -n "$missing_inputs" ]]; then
-  printf 'FAIL allowed_sizes.json 白名单条目未出现在 size_fixtures.json：%s\n' "$missing_inputs" >&2
-  failures=$((failures + 1))
-fi
+while IFS= read -r case_json; do
+  [[ -n "$case_json" ]] || continue
+  input="$("$PYTHON_BIN" -c 'import json,sys; print(json.loads(sys.argv[1])["input"])' "$case_json")"
+  expected_api="$("$PYTHON_BIN" -c 'import json,sys; print(json.loads(sys.argv[1])["api_size"])' "$case_json")"
+  actual_api="$("$PYTHON_BIN" "$normalize_py" "$input" | "$PYTHON_BIN" -c 'import json,sys; print(json.load(sys.stdin)["api_size"])')"
+  if [[ "$actual_api" != "$expected_api" ]]; then
+    printf 'FAIL catalog normalize mismatch: %s expected=%s actual=%s\n' "$input" "$expected_api" "$actual_api" >&2
+    failures=$((failures + 1))
+  else
+    printf 'OK   catalog normalize: %s -> %s\n' "$input" "$actual_api"
+  fi
+done < <("$PYTHON_BIN" -c 'import json,sys; print("\n".join(json.dumps(c) for c in json.load(open(sys.argv[1], encoding="utf-8"))["allowed"]))' "$allowed_json")
 
 if (( failures > 0 )); then
   printf '\n%d allowed-size tests failed.\n' "$failures" >&2

@@ -90,6 +90,21 @@ def validate_allowed_size_spec(spec: str) -> None:
     )
 
 
+def validate_api_size_string(api_size: str) -> None:
+    if api_size == "auto":
+        return
+
+    dim_match = SIZE_DIMENSION_PATTERN.match(api_size)
+    if not dim_match:
+        fail(f"api_size `{api_size}` 不是有效的宽x高格式。")
+
+    width = int(dim_match.group(1))
+    height = int(dim_match.group(2))
+    error = validate_image_size(width, height)
+    if error:
+        fail(f"api_size `{api_size}` 不符合上游约束：{error}")
+
+
 def validate_image_size(width: int, height: int) -> str | None:
     if width <= 0 or height <= 0:
         return "width and height must be positive"
@@ -305,10 +320,21 @@ def main() -> None:
     parser.add_argument("--augment-prompt", action="store_true", help="Augment prompt for explicit WxH")
     parser.add_argument("--prompt", default="", help="Prompt text for --augment-prompt")
     parser.add_argument("--list-allowed", action="store_true", help="Print allowed size catalog JSON")
+    parser.add_argument(
+        "--validate-api-size",
+        action="store_true",
+        help="Validate WxH api_size against OpenAI image constraints (auto is allowed)",
+    )
     args = parser.parse_args()
 
     if args.list_allowed:
         print(json.dumps(load_allowed_sizes_catalog(), ensure_ascii=False, indent=2))
+        return
+
+    if args.validate_api_size:
+        if not args.spec:
+            fail("--validate-api-size requires an api_size argument")
+        validate_api_size_string(args.spec.strip())
         return
 
     if args.augment_prompt:

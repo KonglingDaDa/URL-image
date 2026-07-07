@@ -75,11 +75,11 @@
 
 ## 尺寸
 
-`--size` **只能**用白名单（`scripts/lib/allowed_sizes.json`）。详见 `SKILL.md`「要用 / 不要用」。
+`--size` **只能**用白名单（运行时源：`scripts/lib/allowed_sizes.json`）。完整表见 `SKILL.md`「要用 / 不要用」。
 
-**要用**：`1024x1024`（默认）、`auto`、`1280x720`、`1k`、`2k`、`16:9`、`9:16`、`1:1`、`3:1`、`1:3`、`9:16@1k`、`9:16@2k`、`1k@16:9`、`16:9@1k`、`16:9@2k`、`4k@16:9`、`16:9@4k`、`4k@9:16`、`9:16@4k`
+**要用（示例）**：`1024x1024`（默认）、`16:9`、`9:16`、`1k`、`2k`、`9:16@2k`、`4k@16:9`、`auto` 等——完整列表见 JSON / SKILL.md。
 
-**不要用**：单独 `4k`、`1920x1080`、`1080x1920`、`1000x1800`、`3840x2160`、`2160x3840`、`800x600`、`512x512`、`4096x4096`、任意其他手写 `宽x高`
+**不要用（示例）**：单独 `4k`、`1920x1080`、`1080x1920`、`3840x2160`、`512x512`、任意其他手写 `宽x高`——完整列表见 JSON / SKILL.md。
 
 - 用户说横版 → `16:9`；竖版 → `9:16`；要 4K → `4k@16:9` / `9:16@4k`（**不要**单独写 `4k`）
 - 未指定尺寸 → `1024x1024`
@@ -119,6 +119,7 @@ bash skill_src/image-curl/tests/run_batch_dry_run_no_key.sh
 bash skill_src/image-curl/tests/run_saved_files_schema_tests.sh
 bash skill_src/image-curl/tests/run_size_tests.sh
 bash skill_src/image-curl/tests/run_allowed_size_tests.sh
+bash skill_src/image-curl/tests/run_catalog_consistency_tests.sh
 bash skill_src/image-curl/tests/run_thread_state_tests.sh
 bash skill_src/image-curl/tests/run_batch_aggregate_tests.sh
 bash skill_src/image-curl/tests/run_edit_dry_run_fixture.sh

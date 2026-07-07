@@ -9,3 +9,4 @@ cat.txt
 .omx/
 local.env
 **/local.env
+.image-curl-output/

@@ -38,7 +38,7 @@
 
 - 统一入口 `image-curl.sh` / `image-curl.ps1`：`generate`、`edit`、`generate-batch`
 - 文生图与图生图编辑（multipart `images/edits`）
-- 尺寸简写：`16:9`、`9:16@2k`、`2k`、`1k@16:9` 等
+- 尺寸简写：`16:9`、`9:16@2k`、`2k`、`1k@16:9` 等（白名单源：`skill_src/image-curl/scripts/lib/allowed_sizes.json`）
 - 输出：`--output`、`--output-dir`、`--name`；默认 `~/.codex/generated_images/<thread|manual>/`
 - 线程占位符：`[Image #N]`、`[Turn -1 Image #1]`、`[Thread Image #N]`、`[Last Output]`
 - `--image-set`：`active`、`last-output`、`latest-turn`、`turn:-K`、`thread:1,2,5`
