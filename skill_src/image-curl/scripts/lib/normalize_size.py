@@ -220,9 +220,32 @@ def is_explicit_dimension(spec: str) -> bool:
     return SIZE_DIMENSION_PATTERN.match(spec.strip()) is not None
 
 
+def lookup_allowed_api_size(spec: str) -> tuple[str, str | None, bool] | None:
+    """Return catalog api_size for a whitelisted input spec, or None if not found."""
+    canonical = canonicalize_size_spec(spec)
+    catalog = load_allowed_sizes_catalog()
+    for item in catalog.get("allowed", []):
+        if canonicalize_size_spec(item["input"]) != canonical:
+            continue
+        api_size = item["api_size"]
+        raw_spec = spec.strip()
+        is_explicit = is_explicit_dimension(raw_spec)
+        if canonical == "auto" or canonical == canonicalize_size_spec(api_size):
+            size_note = None
+        else:
+            size_note = f"catalog image size {raw_spec} -> {api_size}"
+        return api_size, size_note, is_explicit
+    return None
+
+
 def normalize_image_size(spec: str) -> tuple[str, str | None, bool]:
     raw_spec = spec.strip()
     validate_allowed_size_spec(raw_spec)
+
+    catalog_result = lookup_allowed_api_size(raw_spec)
+    if catalog_result is not None:
+        return catalog_result
+
     if raw_spec.lower() == "auto":
         return "auto", None, False
 
