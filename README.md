@@ -53,7 +53,7 @@
 | 平台 | 统一入口 | 子脚本 | 额外依赖 |
 |---|---|---|---|
 | macOS / Linux | `image-curl.sh` | `*.sh` | `bash`、`curl`、`python3` |
-| Windows | `image-curl.ps1` | `*.ps1` | PowerShell 5.1+、`curl.exe` |
+| Windows | `image-curl.ps1` | `*.ps1` | PowerShell 5.1+、`curl.exe`、`python3` |
 
 ### macOS
 
@@ -69,9 +69,11 @@ bash --version && curl --version && python3 --version
 
 - **推荐**在 **PowerShell** 里运行 `.ps1`，无需 Git Bash / WSL
 - skill 路径：`%USERPROFILE%\.codex\skills\image-curl\`
+- 除 `curl.exe` 外还需 **Python 3**（命令常为 `python`、`python3` 或 `py -3`）：用于尺寸校验与规范化、线程占位符/状态、批量 JSONL 解析（`normalize_size.py`、`thread_state.py`、`parse_batch_jsonl.py`）
 
 ```powershell
-$PSVersionTable.PSVersion; curl.exe --version
+$PSVersionTable.PSVersion; curl.exe --version; python --version
+# 若无 python，可试：py -3 --version
 ```
 
 ## 安装
@@ -214,6 +216,7 @@ skill_src/
       edit_image.sh / edit_image.ps1
       generate_batch.sh / generate_batch.ps1
       lib/
+        allowed_sizes.json
         normalize_size.py
         thread_state.py
         parse_batch_jsonl.py

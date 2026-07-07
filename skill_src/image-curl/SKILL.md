@@ -48,6 +48,7 @@ description: 只要用户提出绘制、生成、创作、编辑、变换图片�
 
 - PowerShell 5.1+（或 PowerShell 7+）
 - `curl.exe`（Windows 10/11 通常自带）
+- `python3`（Windows 上常为 `python` 或 `py -3`，可通过 Microsoft Store 或 [python.org](https://www.python.org/downloads/) 安装）：用于尺寸校验、线程状态、批量 JSONL 解析
 
 ### 平台差异
 
@@ -61,11 +62,12 @@ description: 只要用户提出绘制、生成、创作、编辑、变换图片�
 
 1. **Windows + PowerShell**：默认调用 `image-curl.ps1` 或 `generate_image.ps1` / `edit_image.ps1`，参数格式与 `.sh` 相同。
 2. **找不到 curl.exe**：提示用户安装或启用 Windows 自带 `curl.exe`，不要用 `Invoke-WebRequest` 代替。
-3. **macOS / Linux 缺 bash/python3**：补齐依赖后再运行 `.sh`。
-4. **macOS Bash 语法报错**（如 `local -n`、`mapfile`）：更新到本仓库最新版 skill 并重新安装；旧版脚本不兼容 `/bin/bash` 3.2。
-5. **Permission denied（.sh）**：执行 `chmod +x scripts/*.sh`。
-6. **路径找不到**：使用当前 shell 能识别的绝对路径传 `--output` / `--image`。
-7. **API Key 已配置但仍报错**：检查 skill 目录下 `local.env` 是否存在，且包含 `IMAGE_CURL_API_KEY`。
+3. **Windows 缺 Python 3**：安装 Python 3 并确保 `python`、`python3` 或 `py -3` 可用；`.ps1` 依赖 Python 处理尺寸、线程状态与批量 JSONL。
+4. **macOS / Linux 缺 bash/python3**：补齐依赖后再运行 `.sh`。
+5. **macOS Bash 语法报错**（如 `local -n`、`mapfile`）：更新到本仓库最新版 skill 并重新安装；旧版脚本不兼容 `/bin/bash` 3.2。
+6. **Permission denied（.sh）**：执行 `chmod +x scripts/*.sh`。
+7. **路径找不到**：使用当前 shell 能识别的绝对路径传 `--output` / `--image`。
+8. **API Key 已配置但仍报错**：检查 skill 目录下 `local.env` 是否存在，且包含 `IMAGE_CURL_API_KEY`。
 
 ## 安装与 Key 配置（Agent 必读）
 
