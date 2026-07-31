@@ -246,6 +246,7 @@ payload = {
     "size": size,
     "quality": quality,
     "output_format": output_format,
+    "response_format": "b64_json",
     "moderation": moderation,
     "n": int(count),
 }
@@ -287,26 +288,39 @@ PY
     return 0
   fi
 
-  local response_file
+  local response_file save_err_file
   response_file="$(mktemp "${batch_tmp_dir}/response-${index}.XXXXXX.json")"
-  if ! curl -sS --fail-with-body -X POST "$endpoint" \
-    -H "Authorization: Bearer $api_key" \
-    -H "Content-Type: application/json" \
-    -H "Cache-Control: no-store, no-cache, max-age=0" \
-    -H "Pragma: no-cache" \
-    --max-time "$timeout" \
-    -d "$payload" >"$response_file"; then
-    local error_body
-    error_body="$(<"$response_file")"
-    printf 'job %s failed: curl 请求失败。%s\n' "$index" "$error_body" >"$batch_tmp_dir/error-${index}.txt"
-    return 1
-  fi
+  save_err_file="$(mktemp "${batch_tmp_dir}/save-err-${index}.XXXXXX.txt")"
+  local max_save_attempts="${IMAGE_CURL_SAVE_RETRIES:-3}"
+  [[ "$max_save_attempts" =~ ^[0-9]+$ && "$max_save_attempts" -ge 1 ]] || max_save_attempts=3
+  local attempt=1
+  local result_json=""
+  while true; do
+    if ! curl -sS --fail-with-body -X POST "$endpoint" \
+      -H "Authorization: Bearer $api_key" \
+      -H "Content-Type: application/json" \
+      -H "Cache-Control: no-store, no-cache, max-age=0" \
+      -H "Pragma: no-cache" \
+      --max-time "$timeout" \
+      -d "$payload" >"$response_file"; then
+      local error_body
+      error_body="$(<"$response_file")"
+      printf 'job %s failed: curl 请求失败。%s\n' "$index" "$error_body" >"$batch_tmp_dir/error-${index}.txt"
+      return 1
+    fi
 
-  local result_json
-  if ! result_json="$(save_image_response "$response_file" "$output" "$resolved_metadata" "$job_format" "$job_count")"; then
-    printf 'job %s failed: 无法保存响应图片。\n' "$index" >"$batch_tmp_dir/error-${index}.txt"
-    return 1
-  fi
+    if result_json="$(save_image_response "$response_file" "$output" "$resolved_metadata" "$job_format" "$job_count" "$api_key" 2>"$save_err_file")"; then
+      break
+    fi
+    local err_msg
+    err_msg="$(<"$save_err_file")"
+    if (( attempt >= max_save_attempts )) || ! grep -Eq '缺少 data|b64_json|url 下载|从 data\[.*\]\.url' <<<"$err_msg"; then
+      printf 'job %s failed: 无法保存响应图片。%s\n' "$index" "$err_msg" >"$batch_tmp_dir/error-${index}.txt"
+      return 1
+    fi
+    attempt=$((attempt + 1))
+    sleep 1
+  done
 
   printf '%s\n' "$result_json" >"$batch_tmp_dir/result-${index}.json"
   return 0

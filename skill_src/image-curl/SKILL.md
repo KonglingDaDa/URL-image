@@ -340,4 +340,4 @@ $image-curl image="[Last Output]" image="[Image #1]" prompt="融合风格" name=
 - 输出文件已存在：改用新路径，或在用户同意覆盖时使用 `--overwrite`。
 - 占位符 / `--image-set` 在无 `CODEX_THREAD_ID` 时报错：改用本地 `--image` 路径，或提示用户在 Codex 线程内运行。
 - 非 JSON / HTTP 错误：保留命令输出中的错误正文，并向上游报告具体信息。
-- 缺少 `b64_json`：检查响应 JSON，说明图片未按预期格式返回。
+- 缺少 `b64_json` / `url` 或 url 下载 401：网关会在 `data[].b64_json` 与 `data[].url` 间切换。脚本优先解码 b64；仅有 url 时先无鉴权下载（适配 S3 预签名），401/403 再带 Bearer。部分内容主机不接受生图 Key，脚本默认最多重试 3 次（`IMAGE_CURL_SAVE_RETRIES`）。仍失败则检查响应字段与网关路由。

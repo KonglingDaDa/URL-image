@@ -210,6 +210,7 @@ multipart = {
     "size": size,
     "quality": quality,
     "output_format": output_format,
+    "response_format": "b64_json",
     "moderation": moderation,
     "n": int(count),
     "image[]": [normalize_path(image) for image in images],
@@ -237,9 +238,10 @@ fi
 
 response_file="$(mktemp "${TMPDIR:-/tmp}/image-curl-edit-response.XXXXXX.json")"
 prompt_tmp="$(mktemp "${TMPDIR:-/tmp}/image-curl-edit-prompt.XXXXXX.txt")"
+save_err_file="$(mktemp "${TMPDIR:-/tmp}/image-curl-edit-save-err.XXXXXX.txt")"
 printf '%s' "$prompt" >"$prompt_tmp"
 cleanup() {
-  rm -f "$response_file" "$prompt_tmp"
+  rm -f "$response_file" "$prompt_tmp" "$save_err_file"
 }
 trap cleanup EXIT
 
@@ -254,6 +256,7 @@ curl_args=(
   --form-string "size=$size"
   --form-string "quality=$quality"
   --form-string "output_format=$format"
+  --form-string "response_format=b64_json"
   --form-string "moderation=$moderation"
   --form-string "n=$count"
 )
@@ -274,9 +277,26 @@ if [[ -n "$resolved_mask" ]]; then
   curl_args+=(-F "mask=@$(get_curl_file_path "$resolved_mask")")
 fi
 
-curl "${curl_args[@]}" > "$response_file"
-
-result_json="$(save_image_response "$response_file" "$output" "$metadata" "$format" "$count")"
+max_save_attempts="${IMAGE_CURL_SAVE_RETRIES:-3}"
+[[ "$max_save_attempts" =~ ^[0-9]+$ && "$max_save_attempts" -ge 1 ]] || max_save_attempts=3
+attempt=1
+result_json=""
+while true; do
+  curl "${curl_args[@]}" > "$response_file"
+  if result_json="$(save_image_response "$response_file" "$output" "$metadata" "$format" "$count" "$api_key" 2>"$save_err_file")"; then
+    break
+  fi
+  err_msg="$(<"$save_err_file")"
+  if (( attempt >= max_save_attempts )) || ! grep -Eq '缺少 data|b64_json|url 下载|从 data\[.*\]\.url' <<<"$err_msg"; then
+    printf '%s\n' "$err_msg" >&2
+    exit 1
+  fi
+  printf '警告：第 %s/%s 次解析/下载响应图片失败，正在重试（网关可能返回了不可下载的 url）…\n' \
+    "$attempt" "$max_save_attempts" >&2
+  printf '  %s\n' "$(printf '%s' "$err_msg" | tr '\n' ' ')" >&2
+  attempt=$((attempt + 1))
+  sleep 1
+done
 read_lines_into_array saved_paths extract_saved_paths_from_result "$result_json"
 if ((${#saved_paths[@]} > 0)); then
   save_thread_state "$thread_id" --active-input "${resolved_images[@]}" --last-output "${saved_paths[@]}"

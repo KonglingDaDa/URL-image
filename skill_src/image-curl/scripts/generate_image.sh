@@ -168,6 +168,9 @@ payload = {
     "size": size,
     "quality": quality,
     "output_format": output_format,
+    # Prefer inline bytes when the gateway honors it; save_image_response still
+    # accepts data[].url (pre-signed / content host) as a fallback.
+    "response_format": "b64_json",
     "moderation": moderation,
     "n": int(count),
 }
@@ -208,20 +211,42 @@ PY
 fi
 
 response_file="$(mktemp "${TMPDIR:-/tmp}/image-curl-response.XXXXXX.json")"
+save_err_file="$(mktemp "${TMPDIR:-/tmp}/image-curl-save-err.XXXXXX.txt")"
 cleanup() {
-  rm -f "$response_file"
+  rm -f "$response_file" "$save_err_file"
 }
 trap cleanup EXIT
 
-curl -sS --fail-with-body -X POST "$endpoint" \
-  -H "Authorization: Bearer $api_key" \
-  -H "Content-Type: application/json" \
-  -H "Cache-Control: no-store, no-cache, max-age=0" \
-  -H "Pragma: no-cache" \
-  --max-time "$timeout" \
-  -d "$payload" > "$response_file"
+# Gateways may alternate between data[].b64_json and data[].url hosts; some URL
+# hosts reject the generation API key. Retry a few times for that class of failure.
+max_save_attempts="${IMAGE_CURL_SAVE_RETRIES:-3}"
+[[ "$max_save_attempts" =~ ^[0-9]+$ && "$max_save_attempts" -ge 1 ]] || max_save_attempts=3
+attempt=1
+result_json=""
+while true; do
+  curl -sS --fail-with-body -X POST "$endpoint" \
+    -H "Authorization: Bearer $api_key" \
+    -H "Content-Type: application/json" \
+    -H "Cache-Control: no-store, no-cache, max-age=0" \
+    -H "Pragma: no-cache" \
+    --max-time "$timeout" \
+    -d "$payload" > "$response_file"
 
-result_json="$(save_image_response "$response_file" "$output" "$metadata" "$format" "$count")"
+  if result_json="$(save_image_response "$response_file" "$output" "$metadata" "$format" "$count" "$api_key" 2>"$save_err_file")"; then
+    break
+  fi
+  err_msg="$(<"$save_err_file")"
+  if (( attempt >= max_save_attempts )) || ! grep -Eq '缺少 data|b64_json|url 下载|从 data\[.*\]\.url' <<<"$err_msg"; then
+    printf '%s\n' "$err_msg" >&2
+    exit 1
+  fi
+  printf '警告：第 %s/%s 次解析/下载响应图片失败，正在重试（网关可能返回了不可下载的 url）…\n' \
+    "$attempt" "$max_save_attempts" >&2
+  printf '  %s\n' "$(printf '%s' "$err_msg" | tr '\n' ' ')" >&2
+  attempt=$((attempt + 1))
+  sleep 1
+done
+
 thread_id="$(get_thread_id)"
 read_lines_into_array saved_paths extract_saved_paths_from_result "$result_json"
 if ((${#saved_paths[@]} > 0)); then

@@ -130,7 +130,7 @@
 | rollout 占位符 / `--image-set` 报错 | 确认在 Codex 线程内（`CODEX_THREAD_ID`）；或改本地 `--image` 路径 |
 | `未找到线程 … rollout` | 线程无 session 记录；改用本地文件路径 |
 | `curl` 非零退出 / HTTP 错误 | 保留 stderr 正文；检查 base URL 是否为 `https://aicode.cat` |
-| 缺少 `b64_json` | 上报响应 JSON 结构异常 |
+| 缺少 `b64_json` / `url` | 网关应给 `data[].b64_json` 或可下载 `data[].url`；脚本会先解码 b64，否则下载 url（预签名无鉴权优先，401/403 再带 Bearer）。仍失败则上报响应字段与下载错误 |
 | Windows 找不到 `curl` | 提示启用系统 `curl.exe`，不用 `Invoke-WebRequest` |
 | `.sh` Permission denied | `chmod +x scripts/*.sh` |
 | macOS `local -n` / `mapfile` / 语法错误 | 仓库脚本已兼容 Bash 3.2；请更新到最新 skill 并重新 `cp -R` 安装 |

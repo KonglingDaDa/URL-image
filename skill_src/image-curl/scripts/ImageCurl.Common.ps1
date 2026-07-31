@@ -319,13 +319,86 @@ function Assert-OutputTargetsAvailable {
     }
 }
 
+function Get-ImageCurlBytesFromUrl {
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [string]$ApiKey = ''
+    )
+
+    if ($Url -match '^(?i)data:') {
+        $comma = $Url.IndexOf(',')
+        if ($comma -lt 0) {
+            Write-ImageCurlError 'data URL 格式无效。'
+        }
+        $meta = $Url.Substring(0, $comma)
+        $payload = $Url.Substring($comma + 1)
+        if ($meta -match '(?i);base64') {
+            try {
+                return [Convert]::FromBase64String($payload)
+            } catch {
+                Write-ImageCurlError "data URL 中的 base64 图片数据无效：$($_.Exception.Message)"
+            }
+        }
+        return [System.Text.Encoding]::UTF8.GetBytes([uri]::UnescapeDataString($payload))
+    }
+
+    # Prefer no Authorization first: S3 pre-signed URLs reject extra headers (406).
+    # Retry with Bearer only on 401/403 (auth-gated content hosts).
+    $attempts = @(
+        @{ Headers = $null; Label = '无鉴权' }
+    )
+    if ($ApiKey) {
+        $attempts += @{ Headers = @{ Authorization = "Bearer $ApiKey" }; Label = 'Bearer' }
+    }
+
+    $lastError = $null
+    foreach ($attempt in $attempts) {
+        $client = $null
+        try {
+            # WebClient.DownloadData keeps binary intact (Invoke-WebRequest Content can corrupt bytes).
+            $client = New-Object System.Net.WebClient
+            $client.Headers.Clear()
+            if ($attempt.Headers) {
+                foreach ($key in $attempt.Headers.Keys) {
+                    $client.Headers[$key] = $attempt.Headers[$key]
+                }
+            }
+            $bytes = $client.DownloadData($Url)
+            if (-not $bytes -or $bytes.Length -eq 0) {
+                throw "下载结果为空"
+            }
+            return [byte[]]$bytes
+        } catch {
+            $lastError = $_
+            $statusCode = $null
+            $ex = $_.Exception
+            while ($ex) {
+                if ($ex -is [System.Net.WebException] -and $ex.Response) {
+                    try { $statusCode = [int]$ex.Response.StatusCode } catch { }
+                    break
+                }
+                $ex = $ex.InnerException
+            }
+            if ($null -eq $attempt.Headers -and $ApiKey -and ($statusCode -eq 401 -or $statusCode -eq 403)) {
+                continue
+            }
+            $detail = if ($statusCode) { "HTTP $statusCode" } else { $_.Exception.Message }
+            Write-ImageCurlError "从 data[].url 下载图片失败（$($attempt.Label) $detail）。"
+        } finally {
+            if ($client) { $client.Dispose() }
+        }
+    }
+    Write-ImageCurlError "从 data[].url 下载图片失败：$($lastError.Exception.Message)"
+}
+
 function Save-ImageCurlResponse {
     param(
         [string]$ResponseJson,
         [string]$OutputPath,
         [string]$MetadataPath,
         [string]$Format,
-        [int]$RequestedCount
+        [int]$RequestedCount,
+        [string]$ApiKey = ''
     )
 
     try {
@@ -334,9 +407,20 @@ function Save-ImageCurlResponse {
         Write-ImageCurlError "响应不是合法的 JSON：$($_.Exception.Message)"
     }
 
+    if ($null -ne $response.PSObject.Properties['error'] -and $response.error) {
+        $err = $response.error
+        $message = if ($err.message) { $err.message } elseif ($err.code) { $err.code } else { "$err" }
+        Write-ImageCurlError "接口返回错误：$message"
+    }
+
     $data = @($response.data)
     if ($data.Count -eq 0) {
-        Write-ImageCurlError '响应 JSON 中缺少 data[0]。'
+        $top = if ($response -is [System.Management.Automation.PSObject]) {
+            ($response.PSObject.Properties.Name | Sort-Object) -join ', '
+        } else {
+            $response.GetType().Name
+        }
+        Write-ImageCurlError "响应 JSON 中缺少 data[0]。顶层字段：$top。"
     }
 
     $targetCount = if ($RequestedCount -gt 1) { $RequestedCount } else { $data.Count }
@@ -345,14 +429,23 @@ function Save-ImageCurlResponse {
 
     for ($index = 0; $index -lt $data.Count; $index++) {
         $item = $data[$index]
+        $bytes = $null
         $b64 = $item.b64_json
-        if (-not $b64) {
-            Write-ImageCurlError "响应 JSON 中缺少 data[$index].b64_json。"
-        }
-        try {
-            $bytes = [Convert]::FromBase64String($b64)
-        } catch {
-            Write-ImageCurlError "data[$index] 中的 base64 图片数据无效：$($_.Exception.Message)"
+        if ($b64) {
+            try {
+                $bytes = [Convert]::FromBase64String($b64)
+            } catch {
+                Write-ImageCurlError "data[$index] 中的 base64 图片数据无效：$($_.Exception.Message)"
+            }
+        } elseif ($item.url) {
+            $bytes = Get-ImageCurlBytesFromUrl -Url "$($item.url)" -ApiKey $ApiKey
+        } else {
+            $keys = if ($item -is [System.Management.Automation.PSObject]) {
+                ($item.PSObject.Properties.Name | Sort-Object) -join ', '
+            } else {
+                '(unknown)'
+            }
+            Write-ImageCurlError "响应 JSON 中缺少 data[$index].b64_json（也没有可用的 data[$index].url）。实际字段：$keys。"
         }
         $target = $targets[$index]
         $targetDir = Split-Path -Parent $target
@@ -521,13 +614,14 @@ function Invoke-ImageCurlBatchJob {
     }
 
     $payload = [ordered]@{
-        model         = $Descriptor.model
-        prompt        = $prompt
-        size          = $size
-        quality       = $Descriptor.quality
-        output_format = $format
-        moderation    = $Descriptor.moderation
-        n             = $count
+        model            = $Descriptor.model
+        prompt           = $prompt
+        size             = $size
+        quality          = $Descriptor.quality
+        output_format    = $format
+        response_format  = 'b64_json'
+        moderation       = $Descriptor.moderation
+        n                = $count
     }
     if ("$($Descriptor.background)".Trim()) { $payload.background = "$($Descriptor.background)".Trim() }
     if ($Descriptor.output_compression) { $payload.output_compression = [int]$Descriptor.output_compression }
@@ -569,13 +663,30 @@ function Invoke-ImageCurlBatchJob {
             '--data-binary', "@$bodyFile",
             '-o', $tempFile
         )
-        & curl.exe @curlArgs
-        if ($LASTEXITCODE -ne 0) {
-            $errorBody = if (Test-Path -LiteralPath $tempFile) { Get-Content -LiteralPath $tempFile -Raw } else { '' }
-            throw "curl 请求失败（退出码 $LASTEXITCODE）。$errorBody"
+        $maxSaveAttempts = 3
+        if ($env:IMAGE_CURL_SAVE_RETRIES -match '^\d+$' -and [int]$env:IMAGE_CURL_SAVE_RETRIES -ge 1) {
+            $maxSaveAttempts = [int]$env:IMAGE_CURL_SAVE_RETRIES
         }
-        $responseJson = Get-Content -LiteralPath $tempFile -Raw -Encoding UTF8
-        $result = Save-ImageCurlResponse -ResponseJson $responseJson -OutputPath $output -MetadataPath $metadata -Format $format -RequestedCount $count
+        $result = $null
+        for ($attempt = 1; $attempt -le $maxSaveAttempts; $attempt++) {
+            & curl.exe @curlArgs
+            if ($LASTEXITCODE -ne 0) {
+                $errorBody = if (Test-Path -LiteralPath $tempFile) { Get-Content -LiteralPath $tempFile -Raw } else { '' }
+                throw "curl 请求失败（退出码 $LASTEXITCODE）。$errorBody"
+            }
+            $responseJson = Get-Content -LiteralPath $tempFile -Raw -Encoding UTF8
+            try {
+                $result = Save-ImageCurlResponse -ResponseJson $responseJson -OutputPath $output -MetadataPath $metadata -Format $format -RequestedCount $count -ApiKey $ApiKey
+                break
+            } catch {
+                $errMsg = $_.Exception.Message
+                $retryable = $errMsg -match '缺少 data|b64_json|url 下载|从 data\[.*\]\.url'
+                if ($attempt -ge $maxSaveAttempts -or -not $retryable) {
+                    throw
+                }
+                Start-Sleep -Seconds 1
+            }
+        }
         return [pscustomobject]@{
             Success = $true
             Preview = $null

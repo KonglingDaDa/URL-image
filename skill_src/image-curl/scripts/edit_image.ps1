@@ -153,6 +153,7 @@ if ($argsObj.dry_run) {
             size            = $size
             quality         = $argsObj.quality
             output_format   = $format
+            response_format = 'b64_json'
             moderation      = $argsObj.moderation
             n               = $count
             'image[]'       = $resolvedImages
@@ -187,6 +188,7 @@ try {
         '--form-string', "size=$size",
         '--form-string', "quality=$($argsObj.quality)",
         '--form-string', "output_format=$format",
+        '--form-string', 'response_format=b64_json',
         '--form-string', "moderation=$($argsObj.moderation)",
         '--form-string', "n=$count"
     )
@@ -204,13 +206,31 @@ try {
     }
     $curlArgs += @('-o', $tempFile)
 
-    & curl.exe @curlArgs
-    if ($LASTEXITCODE -ne 0) {
-        $errorBody = if (Test-Path -LiteralPath $tempFile) { Get-Content -LiteralPath $tempFile -Raw } else { '' }
-        Write-ImageCurlError "curl 请求失败（退出码 $LASTEXITCODE）。$errorBody"
+    $maxSaveAttempts = 3
+    if ($env:IMAGE_CURL_SAVE_RETRIES -match '^\d+$' -and [int]$env:IMAGE_CURL_SAVE_RETRIES -ge 1) {
+        $maxSaveAttempts = [int]$env:IMAGE_CURL_SAVE_RETRIES
     }
-    $responseJson = Get-Content -LiteralPath $tempFile -Raw -Encoding UTF8
-    $result = Save-ImageCurlResponse -ResponseJson $responseJson -OutputPath $output -MetadataPath $metadata -Format $format -RequestedCount $count
+    $result = $null
+    for ($attempt = 1; $attempt -le $maxSaveAttempts; $attempt++) {
+        & curl.exe @curlArgs
+        if ($LASTEXITCODE -ne 0) {
+            $errorBody = if (Test-Path -LiteralPath $tempFile) { Get-Content -LiteralPath $tempFile -Raw } else { '' }
+            Write-ImageCurlError "curl 请求失败（退出码 $LASTEXITCODE）。$errorBody"
+        }
+        $responseJson = Get-Content -LiteralPath $tempFile -Raw -Encoding UTF8
+        try {
+            $result = Save-ImageCurlResponse -ResponseJson $responseJson -OutputPath $output -MetadataPath $metadata -Format $format -RequestedCount $count -ApiKey $config.ApiKey
+            break
+        } catch {
+            $errMsg = $_.Exception.Message
+            $retryable = $errMsg -match '缺少 data|b64_json|url 下载|从 data\[.*\]\.url'
+            if ($attempt -ge $maxSaveAttempts -or -not $retryable) {
+                throw
+            }
+            Write-Host "警告：第 $attempt/$maxSaveAttempts 次解析/下载响应图片失败，正在重试（网关可能返回了不可下载的 url）…" -ForegroundColor Yellow
+            Start-Sleep -Seconds 1
+        }
+    }
     $savedPaths = [string[]]@(Get-SavedPathsFromResult -Result $result)
     if ($savedPaths.Count -gt 0) {
         Save-ThreadState -ThreadId $threadId -ActiveInput $resolvedImages -LastOutput $savedPaths

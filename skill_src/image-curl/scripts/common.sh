@@ -600,30 +600,143 @@ save_image_response() {
   local metadata_path="${3:-}"
   local output_format="$4"
   local requested_count="$5"
+  local api_key="${6:-}"
 
-  python3 - "$response_file" "$output_path" "$metadata_path" "$output_format" "$requested_count" <<'PY'
+  python3 - "$response_file" "$output_path" "$metadata_path" "$output_format" "$requested_count" "$api_key" <<'PY'
 import base64
 import json
+import re
 import sys
 from pathlib import Path
+from urllib import error as urlerror
+from urllib import request as urlrequest
 
 response_path = Path(sys.argv[1])
 output_path = Path(sys.argv[2])
 metadata_path = Path(sys.argv[3]) if sys.argv[3] else None
 output_format = sys.argv[4]
 requested_count = int(sys.argv[5])
+api_key = sys.argv[6].strip() if len(sys.argv) > 6 else ""
+
+URL_FETCH_TIMEOUT = 120
+DATA_URL_PATTERN = re.compile(
+    r"^data:(?P<mime>[\w.+/-]+)?(?P<base64>;base64)?,(?P<data>.*)$",
+    re.IGNORECASE | re.DOTALL,
+)
+
 
 def normalize_path(path):
     return str(path).replace("\\", "/")
+
+
+def item_keys(item):
+    if isinstance(item, dict):
+        return sorted(item.keys())
+    return type(item).__name__
+
+
+def decode_data_url(raw: str) -> bytes:
+    match = DATA_URL_PATTERN.match(raw.strip())
+    if not match:
+        raise ValueError("不是合法的 data URL")
+    payload = match.group("data")
+    if match.group("base64"):
+        return base64.b64decode(payload, validate=False)
+    from urllib.parse import unquote_to_bytes
+
+    return unquote_to_bytes(payload)
+
+
+def fetch_url_bytes(url: str, api_key: str) -> bytes:
+    """Download image bytes from url.
+
+    Prefer no Authorization first: many gateways return S3 pre-signed URLs
+    that break (406) if extra signed headers are sent. Retry with Bearer only
+    on 401/403 (auth-gated content hosts).
+    """
+    if url.lower().startswith("data:"):
+        return decode_data_url(url)
+
+    last_error = None
+    attempts = [(None, "无鉴权")]
+    if api_key:
+        attempts.append(({"Authorization": f"Bearer {api_key}"}, "Bearer"))
+
+    for headers, label in attempts:
+        try:
+            req = urlrequest.Request(url, headers=headers or {})
+            with urlrequest.urlopen(req, timeout=URL_FETCH_TIMEOUT) as resp:
+                body = resp.read()
+            if not body:
+                raise ValueError(f"{label}下载结果为空")
+            return body
+        except urlerror.HTTPError as exc:
+            last_error = exc
+            body_hint = ""
+            try:
+                body_hint = exc.read(200).decode("utf-8", errors="replace")
+            except Exception:
+                body_hint = ""
+            # Retry with auth only when the host rejected anonymous access.
+            if headers is None and exc.code in (401, 403) and api_key:
+                continue
+            extra = f" body={body_hint!r}" if body_hint else ""
+            raise SystemExit(
+                f"从 data[].url 下载图片失败（{label} HTTP {exc.code}）：{exc.reason}。"
+                f"若链接主机不接受当前 API Key，且非预签名公开 URL，请重试请求或要求网关返回 b64_json。"
+                f"{extra}"
+            ) from exc
+        except Exception as exc:
+            last_error = exc
+            if headers is None and api_key:
+                continue
+            raise SystemExit(f"从 data[].url 下载图片失败（{label}）：{exc}") from exc
+
+    raise SystemExit(f"从 data[].url 下载图片失败：{last_error}")
+
+
+def image_bytes_from_item(item, index: int, api_key: str) -> bytes:
+    if not isinstance(item, dict):
+        raise SystemExit(
+            f"响应 JSON 中 data[{index}] 不是对象（实际类型：{type(item).__name__}）。"
+        )
+
+    b64 = item.get("b64_json")
+    if isinstance(b64, str) and b64.strip():
+        try:
+            return base64.b64decode(b64, validate=True)
+        except Exception as exc:
+            raise SystemExit(f"data[{index}] 中的 base64 图片数据无效：{exc}") from exc
+
+    url = item.get("url")
+    if isinstance(url, str) and url.strip():
+        return fetch_url_bytes(url.strip(), api_key)
+
+    keys = ", ".join(item_keys(item)) or "(empty)"
+    raise SystemExit(
+        f"响应 JSON 中缺少 data[{index}].b64_json（也没有可用的 data[{index}].url）。"
+        f"实际字段：{keys}。"
+    )
+
 
 try:
     response = json.loads(response_path.read_text(encoding="utf-8"))
 except Exception as exc:
     raise SystemExit(f"响应不是合法的 JSON：{exc}")
 
-data = response.get("data")
+if isinstance(response, dict) and response.get("error"):
+    err = response.get("error")
+    if isinstance(err, dict):
+        message = err.get("message") or err.get("code") or json.dumps(err, ensure_ascii=False)
+    else:
+        message = str(err)
+    raise SystemExit(f"接口返回错误：{message}")
+
+data = response.get("data") if isinstance(response, dict) else None
 if not isinstance(data, list) or not data:
-    raise SystemExit("响应 JSON 中缺少 data[0]。")
+    top = ", ".join(sorted(response.keys())) if isinstance(response, dict) else type(response).__name__
+    raise SystemExit(f"响应 JSON 中缺少 data[0]。顶层字段：{top}。")
+
 
 def targets_for(output_path, output_format, count):
     if count == 1:
@@ -632,19 +745,13 @@ def targets_for(output_path, output_format, count):
     stem = output_path.stem if output_path.suffix else output_path.name
     return [output_path.with_name(f"{stem}-{index}{suffix}") for index in range(1, count + 1)]
 
+
 target_count = requested_count if requested_count > 1 else len(data)
 targets = targets_for(output_path, output_format, target_count)
 saved_files = []
 
 for index, item in enumerate(data):
-    b64 = item.get("b64_json") if isinstance(item, dict) else None
-    if not isinstance(b64, str) or not b64:
-        raise SystemExit(f"响应 JSON 中缺少 data[{index}].b64_json。")
-    try:
-        image_bytes = base64.b64decode(b64, validate=True)
-    except Exception as exc:
-        raise SystemExit(f"data[{index}] 中的 base64 图片数据无效：{exc}")
-
+    image_bytes = image_bytes_from_item(item, index, api_key)
     target = targets[index]
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(image_bytes)
