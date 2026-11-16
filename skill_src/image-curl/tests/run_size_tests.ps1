@@ -15,7 +15,16 @@ if (-not (Test-Path -LiteralPath $AllowedJsonPath)) {
     exit 1
 }
 
-. $CommonPath
+# Resolves --size through the real entry script (dry-run) and returns the payload size.
+function Resolve-ImageSize {
+    param([string]$Spec)
+    $generate = Join-Path $SkillRoot 'scripts/generate_image.ps1'
+    $target = Join-Path ([System.IO.Path]::GetTempPath()) ("size-" + [guid]::NewGuid().ToString('N') + '.png')
+    $out = & $generate --dry-run --prompt t --size $Spec --output $target 2>$null
+    if ($LASTEXITCODE -ne 0) { throw "dry-run rejected size $Spec" }
+    $json = ($out | Out-String).Trim() | ConvertFrom-Json
+    return [pscustomobject]@{ ApiSize = $json.payload.size; SizeNote = $json.size_note }
+}
 
 $catalog = Get-Content -LiteralPath $AllowedJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $failures = 0
@@ -30,7 +39,7 @@ foreach ($case in $catalog.allowed) {
         $failures++
         Write-Host "FAIL $($case.input)" -ForegroundColor Red
         Write-Host "  expected api_size=$($case.api_size)"
-        Write-Host "  actual   api_size=$($actual.ApiSize) size_note=$actualNote is_explicit=$($actual.IsExplicitDimension)"
+        Write-Host "  actual   api_size=$($actual.ApiSize) size_note=$actualNote"
     } else {
         Write-Host "OK   $($case.input) -> $($actual.ApiSize)" -ForegroundColor Green
     }

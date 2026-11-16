@@ -1,20 +1,19 @@
 interface:
   display_name: "Image Curl（curl 生图）"
-  short_description: "通过 curl 生成或编辑本地图片"
+  short_description: "通过 curl 用 GPT 或 Gemini 生成、编辑本地图片"
   default_prompt: >
     当用户要求生成或编辑图片并得到本地文件时，必须调用 $image-curl 并执行其脚本，不得跳过脚本直接作答。
-    默认 base URL 为 https://aicode.cat；生图专用 API Key 只写入 skill 目录 local.env，禁止写入
-    ~/.codex/auth.json 或 ~/.claude/settings.json。
-    Windows 用 image-curl.ps1 / generate_image.ps1 / edit_image.ps1；macOS/Linux 用 .sh 对应脚本。
-    脚本路径：若工作区有 skill_src/image-curl/scripts/，必须用该仓库绝对路径，勿硬编码 ~/.codex/skills/...；
-    仅安装到 Codex 后才用 ~/.codex/skills/image-curl/scripts/。
-    统一入口子命令：generate（文生图）、edit（图生图）、generate-batch（JSONL 批量）。
-    输出可用 --output、--output-dir、--name；仅 --name 时默认目录优先 IMAGE_CURL_OUTPUT_DIR，
-    其次 ~/.codex/generated_images/<thread|manual>/，沙箱不可写时自动回退 ./.image-curl-output/。
-    --size 仅允许白名单（scripts/lib/allowed_sizes.json、SKILL.md「要用/不要用」）；不要用 4k、1920x1080、1000x1800、
-    800x600、4096x4096、512x512 等。要用：16:9、9:16@2k、2k、4k@16:9 等。Windows 亦需 python3（尺寸/线程/批量）。
-    edit 复用历史图须显式 --image 占位符（如 [Last Output]、[Image #N]）
-    或 --image-set（active、last-output、latest-turn 等）；支持 --mask 与 --input-fidelity。
+    默认 base URL 为 https://aicode.cat。生图 Key 只写入 skill 目录 local.env：GPT 分组用 IMAGE_CURL_API_KEY，
+    Gemini 分组用 IMAGE_CURL_GEMINI_API_KEY；禁止写入 ~/.codex/auth.json 或 ~/.claude/settings.json。
+    Windows 用 image-curl.ps1；macOS/Linux 用 image-curl.sh。两者都需要 curl 与 Python 3.8+。
+    脚本路径：工作区有 skill_src/image-curl/scripts/ 就用仓库绝对路径；安装后才用 ~/.codex/skills/image-curl/scripts/。
+    子命令：generate（文生图）、edit（图生图）、generate-batch（JSONL 批量）、models（列出 Key 可用模型）。
+    选模型：默认 gpt-image-2；用户说 Gemini / Nano Banana 时用 --model gemini-nano-banana-2.1；
+    透明背景、蒙版、PNG/WebP 输出只能用 GPT 模型。gemini-* 模型自动走 /v1beta generateContent，固定输出 JPEG。
+    --size：GPT 只用白名单（1024x1024、16:9、9:16@2k、4k@16:9 等，不要用 4k、1920x1080）；
+    Gemini 用宽高比[@档位]（1:1、16:9@2k、9:16、4:1、4k 等，不要用 3:1、512）。
+    输出用 --output、--output-dir 或 --name；仅 --name 时默认 ~/.codex/generated_images/<thread|manual>/。
+    edit 复用历史图须显式 --image 占位符（如 [Last Output]、[Image #N]）或 --image-set（active、last-output 等）。
     模型需要看到真实图片时用 edit，不要用 generate。
 
 policy:

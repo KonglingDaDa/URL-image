@@ -26,6 +26,9 @@ $savedKey = $env:IMAGE_CURL_API_KEY
 Remove-Item Env:IMAGE_CURL_API_KEY -ErrorAction SilentlyContinue
 Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
 Remove-Item Env:CLIPROXY_API_KEY -ErrorAction SilentlyContinue
+Remove-Item Env:IMAGE_CURL_GEMINI_API_KEY -ErrorAction SilentlyContinue
+# Ignore the developer's real local.env so "without API key" really has no key.
+$env:IMAGE_CURL_ENV_FILE = Join-Path ([System.IO.Path]::GetTempPath()) 'image-curl-tests-no-local.env'
 
 try {
     Assert-Test 'generate_image.ps1 --dry-run without API key' {
@@ -36,7 +39,7 @@ try {
     }
 
     Assert-Test 'edit_image.ps1 --dry-run without API key' {
-        $img = Join-Path $env:TEMP ("dry-no-key-$([guid]::NewGuid().ToString('N')).png")
+        $img = Join-Path ([System.IO.Path]::GetTempPath()) ("dry-no-key-$([guid]::NewGuid().ToString('N')).png")
         $bytes = [Convert]::FromBase64String(
             'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
         )
@@ -49,6 +52,14 @@ try {
         } finally {
             Remove-Item -LiteralPath $img -Force -ErrorAction SilentlyContinue
         }
+    }
+    Assert-Test 'generate_image.ps1 --dry-run gemini without API key' {
+        $out = & $GenerateScript --dry-run --model gemini-nano-banana-2.1 --size 16:9@2k --prompt 'install check' --name dry-gemini 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "exit code ${LASTEXITCODE}: $out" }
+        $json = ($out | Out-String).Trim() | ConvertFrom-Json
+        if (-not $json.endpoint.EndsWith('/v1beta/models/gemini-nano-banana-2.1:generateContent')) { throw "endpoint: $($json.endpoint)" }
+        if ($json.payload.generationConfig.imageConfig.aspectRatio -ne '16:9') { throw 'aspectRatio missing' }
+        if ($json.payload.generationConfig.imageConfig.imageSize -ne '2K') { throw 'imageSize missing' }
     }
 } finally {
     if ($savedKey) { $env:IMAGE_CURL_API_KEY = $savedKey }

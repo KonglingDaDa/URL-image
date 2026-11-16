@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""Fake curl for image-curl tests.
+
+Reads the scripted responses from $FAKE_CURL_SCRIPT (JSON list, consumed in order):
+  [{"match": "generateContent", "status": 200, "json": {...}} | {"body": "text"}, ...]
+Appends every call to $FAKE_CURL_LOG (JSON lines): argv, url, headers from -K stdin,
+the --data-binary body (parsed JSON when possible) and -F/--form-string fields.
+"""
+import json
+import os
+import sys
+from pathlib import Path
+
+
+def main() -> int:
+    argv = sys.argv[1:]
+    url = next((arg for arg in argv if arg.startswith("http")), "")
+    out_path = argv[argv.index("-o") + 1] if "-o" in argv else None
+    config = sys.stdin.read() if "-K" in argv else ""
+    headers = {}
+    for line in config.splitlines():
+        line = line.strip()
+        if line.startswith("header = "):
+            value = line[len("header = "):].strip().strip('"').replace('\\"', '"').replace("\\\\", "\\")
+            name, _, rest = value.partition(":")
+            headers[name.strip()] = rest.strip()
+    data = None
+    if "--data-binary" in argv:
+        ref = argv[argv.index("--data-binary") + 1]
+        raw = Path(ref[1:]).read_text(encoding="utf-8") if ref.startswith("@") else ref
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            data = raw
+    form = []
+    for index, arg in enumerate(argv):
+        if arg in ("-F", "--form-string"):
+            form.append([arg, argv[index + 1]])
+
+    script_path = Path(os.environ["FAKE_CURL_SCRIPT"])
+    script = json.loads(script_path.read_text(encoding="utf-8"))
+    chosen = None
+    for position, item in enumerate(script):
+        if item.get("match", "") in url:
+            chosen = script.pop(position)
+            break
+    script_path.write_text(json.dumps(script), encoding="utf-8")
+
+    log_path = os.environ.get("FAKE_CURL_LOG")
+    if log_path:
+        with open(log_path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"argv": argv, "url": url, "headers": headers, "data": data, "form": form}) + "\n")
+
+    if chosen is None:
+        sys.stderr.write(f"fake curl: no scripted response for {url}\n")
+        return 7
+    if chosen.get("exit"):
+        sys.stderr.write(chosen.get("stderr", "fake curl failure") + "\n")
+        return int(chosen["exit"])
+    body = json.dumps(chosen["json"]) if "json" in chosen else chosen.get("body", "")
+    if out_path:
+        Path(out_path).write_text(body, encoding="utf-8")
+    sys.stdout.write(str(chosen.get("status", 200)))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

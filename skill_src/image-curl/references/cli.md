@@ -1,65 +1,78 @@
-# CLI 速查（`image-curl` 统一入口）
+# CLI 速查（`image-curl`）
 
-默认 base URL：`https://aicode.cat`。生图专用 API Key **只**写入 skill 目录 `local.env`。
+默认 base URL：`https://aicode.cat`。生图 Key **只**写入 skill 目录 `local.env`：GPT 用 `IMAGE_CURL_API_KEY`，Gemini 用 `IMAGE_CURL_GEMINI_API_KEY`。
 
-## 统一入口
+## 入口
 
-| 平台 | 启动器 |
-|---|---|
-| macOS / Linux | `scripts/image-curl.sh` |
-| Windows PowerShell | `scripts/image-curl.ps1` |
+| 平台 | 统一入口 | 子脚本 |
+|---|---|---|
+| macOS / Linux | `scripts/image-curl.sh` | `generate_image.sh`、`edit_image.sh`、`generate_batch.sh` |
+| Windows PowerShell | `scripts/image-curl.ps1` | `generate_image.ps1`、`edit_image.ps1`、`generate_batch.ps1` |
 
-子命令：`generate`（文生图）、`edit`（图生图/编辑）、`generate-batch`（批量文生图）、`help`。
+子命令：`generate`、`edit`、`generate-batch`（别名 `generate_batch`）、`models`、`help`。各子命令加 `--help` 看完整选项。逻辑都在 `scripts/lib/image_curl.py`，两端参数与输出完全一致。
 
-也可直接调用子脚本：`generate_image.*`、`edit_image.*`、`generate_batch.*`。
-
-**脚本根目录**：仓库内为 `skill_src/image-curl`；安装后为 `~/.codex/skills/image-curl`（Windows：`%USERPROFILE%\.codex\skills\image-curl`）。Agent 在仓库内开发时**必须用仓库路径**，不要写死 `~/.codex/skills/...`。
+脚本根目录：仓库内为 `skill_src/image-curl`；安装后为 `~/.codex/skills/image-curl`（Claude Code：`~/.claude/skills/image-curl`）。在仓库内开发时用仓库路径。
 
 ```bash
-# macOS / Linux — SKILL_ROOT 按上表替换
 SKILL_ROOT=./skill_src/image-curl
 "$SKILL_ROOT/scripts/image-curl.sh" generate --prompt "一只猫" --name cat
+"$SKILL_ROOT/scripts/image-curl.sh" generate --model gemini-nano-banana-2.1 --prompt "一只猫" --size 16:9@2k --name cat
 "$SKILL_ROOT/scripts/image-curl.sh" edit --image ./in.png --prompt "换背景" --name out
 "$SKILL_ROOT/scripts/image-curl.sh" generate-batch --input prompts.jsonl --output-dir ./batch-out
+"$SKILL_ROOT/scripts/image-curl.sh" models
 ```
 
 ```powershell
-# Windows
 & "$env:USERPROFILE\.codex\skills\image-curl\scripts\image-curl.ps1" generate --prompt "一只猫" --name cat
 ```
 
-## 关键规则
+## 选接口
 
-- 用户要生图或改图并得到本地文件时，**必须调用本 skill**，不得跳过脚本直接作答。
-- 模型需要看到真实图片输入时，用 `edit`，不要用 `generate`（`generate` 传 `--image` 会警告并应改用 `edit`）。
-- `edit` **不隐式继承**线程图片状态；复用历史图须显式 `--image` 占位符或 `--image-set` 选择器。
-- 占位符与 rollout 类 `--image-set` 需要 `CODEX_THREAD_ID` 或 `CODEX_SESSION_ID`；无会话时仍可用本地路径与 `[Last Output]`（若状态文件存在）。
-- 默认输出目录（首个可写）：`IMAGE_CURL_OUTPUT_DIR` → `${CODEX_HOME:-~/.codex}/generated_images` → `./.image-curl-output`，其下 `<thread_id|manual>/`。
-- `--output` 写精确路径；`--output-dir` + `--name` 生成「前缀-随机后缀」；仅 `--name` 写入默认目录。
+| 模型 | 接口 | 鉴权头 |
+|---|---|---|
+| `gpt-image-*` 等其余模型 | `POST /v1/images/generations`、`/v1/images/edits` | `Authorization: Bearer` |
+| `gemini-*`、含 `nano-banana` | `POST /v1beta/models/{model}:generateContent` | `x-goog-api-key` |
 
-## 常用选项
+`--provider openai|gemini` 可强制指定。Key 通过 stdin 交给 curl（`-K -`），不会出现在进程命令行里。
 
-**generate / edit 共用：**
+## 选项
 
-- `--prompt` / `--prompt-file`
-- `--output` / `--output-dir` / `--name`
-- `--model`（默认 `gpt-image-2`）
-- `--size`：仅允许白名单格式（见下文「要用 / 不要用」）；完整列表见 `scripts/lib/allowed_sizes.json`
-- `--quality`、`--format`、`--output-compression`、`--moderation`
-- `--count` / `--n`（1–10）
-- `--metadata`、`--overwrite`、`--dry-run`
-- `--base-url`、`--api-key`（临时覆盖；常规 Key 在 `local.env`）
+**generate / edit 共用：** `--prompt` / `--prompt-file`、`--output` / `--output-dir` / `--name`、`--model`、`--provider`、`--size`、`--count` / `--n`（1–10）、`--metadata`、`--overwrite`、`--dry-run`、`--base-url`、`--api-key`、`--timeout`（默认 300）。
 
-**edit 额外：**
+**仅 GPT：** `--quality`、`--format`（png / jpeg / webp）、`--output-compression`（jpeg / webp，0–100）、`--moderation`、`--background`（generate）、`--mask`、`--input-fidelity`（low / high）。Gemini 固定返回 JPEG，传这些会警告并忽略（`--mask` 报错）。
 
-- `--image`（本地路径或占位符，可重复）
-- `--image-set`：`active`、`last-output`、`latest-turn`、`turn:-K`、`thread:1,2,5`
-- `--mask`（PNG 蒙版，透明区域为编辑区）
-- `--input-fidelity`：`low` 或 `high`
+**edit 额外：** `--image`（路径或占位符，可重复）、`--image-set`（`active`、`last-output`、`latest-turn`、`turn:-K`、`thread:1,2,5`）。Gemini 最多 14 张参考图、合计 ≤ 20 MB；不给 `--size` 时沿用输入图比例。
 
-**generate-batch：**
+**generate-batch：** `--input` JSONL（必填）、`--output-dir`（必填）、`--concurrency`（默认 4，1–25），其余选项作为每个 job 的默认值。
 
-- `--input` JSONL（必填）、`--output-dir`（必填）、`--concurrency`（默认 4）
+**models：** `--provider`、`--base-url`、`--api-key`。
+
+## 尺寸
+
+### GPT（白名单，源：`scripts/lib/allowed_sizes.json` 的 `allowed` / `forbidden`）
+
+| 输入 | 发给上游 |
+|---|---|
+| `1024x1024`（默认） | `1024x1024` |
+| `auto` | `auto` |
+| `1280x720` | `1280x720` |
+| `1k` / `2k` | `1024x1024` / `2048x2048` |
+| `16:9` / `9:16` / `1:1` | `3840x2160` / `2160x3840` / `2880x2880` |
+| `3:1` / `1:3` | `3840x1280` / `1280x3840` |
+| `16:9@1k`（= `1k@16:9`）/ `9:16@1k` | `1792x1008` / `1008x1792` |
+| `16:9@2k` / `9:16@2k` | `3584x2016` / `2016x3584` |
+| `4k@16:9`（= `16:9@4k`）/ `4k@9:16`（= `9:16@4k`） | `3840x2160` / `2160x3840` |
+
+不要用：`4k`（单独）、`1920x1080`、`1080x1920`、`1000x1800`、`800x600`、`512x512`、`4096x4096`、`3840x2160`、`2160x3840`。
+
+### Gemini（源：`allowed_sizes.json` 的 `gemini`）
+
+`<宽高比>[@<档位>]` 或 `<档位>[@<宽高比>]`：
+
+- 宽高比：`1:1` `16:9` `9:16` `4:3` `3:4` `3:2` `2:3` `5:4` `4:5` `21:9` `4:1` `1:4` `8:1` `1:8`
+- 档位：`1k`（默认）、`2k`、`4k`；只写档位时为 `1:1`
+- `auto` 不传宽高比；`1024x1024` → `1:1` 1K；`1280x720` → `16:9` 1K
+- 不要用：`3:1`、`1:3`、`512`
 
 ## 占位符（`edit --image`）
 
@@ -70,65 +83,27 @@ SKILL_ROOT=./skill_src/image-curl
 | `[Thread Image #N]` | 线程全局附件顺序第 N 张 |
 | `[Last Output]` / `[Last Output #N]` | 本线程上次保存的输出图 |
 
-变体如 `[Image#1]`、`[image # 1]` 会自动规范化。
-
-## 尺寸：要用 / 不要用
-
-运行时白名单：`scripts/lib/allowed_sizes.json`。`--size` 只能填「要用」条目；下表为紧凑参考，维护以 JSON / `SKILL.md` 为准。
-
-### 要用
-
-| 输入 | 发给上游 | 说明 |
-|---|---|---|
-| `1024x1024` | `1024x1024` | **默认** |
-| `auto` | `auto` | 自适应 |
-| `1280x720` | `1280x720` | 720p 横版 |
-| `1k` | `1024x1024` | 1K 正方形 |
-| `2k` | `2048x2048` | 2K 正方形 |
-| `16:9` | `3840x2160` | 横版全尺寸 |
-| `9:16` | `2160x3840` | 竖版全尺寸 |
-| `1:1` | `2880x2880` | 正方形全尺寸 |
-| `3:1` | `3840x1280` | 超宽横版 |
-| `1:3` | `1280x3840` | 超高竖版 |
-| `9:16@1k` | `1008x1792` | 1K 竖版 |
-| `9:16@2k` | `2016x3584` | 2K 竖版 |
-| `1k@16:9` | `1792x1008` | 1K 横版 |
-| `16:9@1k` | `1792x1008` | 1K 横版（等价） |
-| `16:9@2k` | `3584x2016` | 2K 横版 |
-| `4k@16:9` | `3840x2160` | 4K 横版 |
-| `16:9@4k` | `3840x2160` | 4K 横版（等价） |
-| `4k@9:16` | `2160x3840` | 4K 竖版 |
-| `9:16@4k` | `2160x3840` | 4K 竖版（等价） |
-
-### 不要用
-
-| 输入 | 请改用 |
-|---|---|
-| `4k` | `4k@16:9` / `16:9@4k` / `4k@9:16` / `9:16@4k` |
-| `1000x1800` | `9:16@1k` / `9:16` |
-| `1920x1080` | `16:9` |
-| `1080x1920` | `9:16` |
-| `800x600` | `16:9@1k` / `1k@16:9` |
-| `512x512` | `1k` / `1024x1024` |
-| `4096x4096` | `4k@16:9` / `16:9` / `2k` |
-| `3840x2160` | `16:9` / `4k@16:9` |
-| `2160x3840` | `9:16` / `9:16@4k` |
-
-白名单内的显式像素（`1024x1024`、`1280x720`）会在提示词末尾追加画布约束说明。
-
 ## 批量 JSONL
-
-每行一个字符串 prompt 或 job 对象：
 
 ```jsonl
 "画一只猫"
 {"prompt":"夕阳","size":"16:9","n":2,"name":"sunset-01"}
-{"prompt":"海报","out":"./batch-out/custom.png"}
+{"prompt":"海报","model":"gemini-nano-banana-2.1","size":"9:16@2k","out":"./batch-out/poster.jpg"}
 ```
 
-Job 可覆盖：`prompt`、`model`、`size`、`quality`、`background`、`format`、`compression`、`moderation`、`n`、`name`、`out`。
+job 字段：`prompt`、`model`、`provider`、`size`、`quality`、`background`、`format`、`compression`、`moderation`、`n`、`name`、`out`。stdout 每行一个保存路径；失败的 job 以 `job N failed: …` 写到 stderr，退出码 1。
+
+## 输出
+
+成功时 stdout 一行 JSON：
+
+```json
+{"saved_file": "/abs/cat.png", "bytes": 123456, "revised_prompt": null}
+{"saved_file": "/abs/cat.jpg", "bytes": 123456, "mime_type": "image/jpeg"}
+{"saved_files": [{"file": "/abs/a-1.jpg", "bytes": 1, "mime_type": "image/jpeg"}], "requested_count": 2, "returned_count": 2}
+```
 
 ## 相关文档
 
-- `SKILL.md`：触发规则、工作流程、Agent 必读
-- `../agents/openai.yaml`：隐式调用策略
+- `SKILL.md`：触发规则、选模型、工作流程
+- `../agents/openai.yaml`：Codex 隐式调用策略

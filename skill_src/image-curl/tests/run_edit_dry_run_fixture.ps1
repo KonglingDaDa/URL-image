@@ -25,12 +25,15 @@ $savedKey = $env:IMAGE_CURL_API_KEY
 Remove-Item Env:IMAGE_CURL_API_KEY -ErrorAction SilentlyContinue
 Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
 Remove-Item Env:CLIPROXY_API_KEY -ErrorAction SilentlyContinue
+Remove-Item Env:IMAGE_CURL_GEMINI_API_KEY -ErrorAction SilentlyContinue
+# Ignore the developer's real local.env so "without API key" really has no key.
+$env:IMAGE_CURL_ENV_FILE = Join-Path ([System.IO.Path]::GetTempPath()) 'image-curl-tests-no-local.env'
 
 try {
     Assert-Test 'edit_image.ps1 dry-run resolves last-output without API key' {
-        $codexHome = Join-Path $env:TEMP ("image-curl-edit-dry-" + [guid]::NewGuid().ToString('N'))
+        $codexHome = Join-Path ([System.IO.Path]::GetTempPath()) ("image-curl-edit-dry-" + [guid]::NewGuid().ToString('N'))
         try {
-            $threadDir = Join-Path $codexHome 'generated_images\manual'
+            $threadDir = Join-Path (Join-Path $codexHome 'generated_images') 'manual'
             New-Item -ItemType Directory -Path $threadDir -Force | Out-Null
             $first = Join-Path $threadDir 'first-out.png'
             $bytes = [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==')
@@ -54,7 +57,7 @@ try {
     }
 
     Assert-Test 'edit_image.ps1 dry-run preserves quoted prompt' {
-        $img = Join-Path $env:TEMP ("edit-dry-quote-$([guid]::NewGuid().ToString('N')).png")
+        $img = Join-Path ([System.IO.Path]::GetTempPath()) ("edit-dry-quote-$([guid]::NewGuid().ToString('N')).png")
         $bytes = [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==')
         [IO.File]::WriteAllBytes($img, $bytes)
         try {

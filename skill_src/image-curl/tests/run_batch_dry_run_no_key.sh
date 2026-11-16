@@ -29,7 +29,9 @@ assert_test() {
 }
 
 saved_key="${IMAGE_CURL_API_KEY-}"
-unset IMAGE_CURL_API_KEY OPENAI_API_KEY CLIPROXY_API_KEY 2>/dev/null || true
+unset IMAGE_CURL_API_KEY IMAGE_CURL_GEMINI_API_KEY OPENAI_API_KEY CLIPROXY_API_KEY 2>/dev/null || true
+# Ignore the developer's real local.env so "without API key" really has no key.
+export IMAGE_CURL_ENV_FILE="${TMPDIR:-/tmp}/image-curl-tests-no-local.env"
 
 restore_env() {
   if [[ -n "${saved_key:-}" ]]; then

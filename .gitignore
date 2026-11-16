@@ -10,3 +10,5 @@ cat.txt
 local.env
 **/local.env
 .image-curl-output/
+__pycache__/
+.pytest_cache/

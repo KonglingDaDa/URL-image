@@ -23,7 +23,9 @@ assert_test() {
 }
 
 saved_key="${IMAGE_CURL_API_KEY-}"
-unset IMAGE_CURL_API_KEY OPENAI_API_KEY CLIPROXY_API_KEY 2>/dev/null || true
+unset IMAGE_CURL_API_KEY IMAGE_CURL_GEMINI_API_KEY OPENAI_API_KEY CLIPROXY_API_KEY 2>/dev/null || true
+# Ignore the developer's real local.env so "without API key" really has no key.
+export IMAGE_CURL_ENV_FILE="${TMPDIR:-/tmp}/image-curl-tests-no-local.env"
 
 cleanup() {
   if [[ -n "${saved_key:-}" ]]; then
@@ -50,8 +52,20 @@ test_edit_dry_run() {
   python3 -c 'import json,sys; data=json.loads(sys.argv[1]); sys.exit(0 if data.get("endpoint") else 1)' "$out"
 }
 
+test_gemini_dry_run() {
+  local out
+  out="$("$generate_script" --dry-run --model gemini-nano-banana-2.1 --size 16:9@2k --prompt 'install check' --name dry-gemini 2>/dev/null)" || return 1
+  python3 -c 'import json,sys
+data=json.loads(sys.argv[1])
+assert data["endpoint"].endswith("/v1beta/models/gemini-nano-banana-2.1:generateContent"), data["endpoint"]
+assert data["authorization"] == "x-goog-api-key: ***"
+assert data["payload"]["generationConfig"]["imageConfig"] == {"aspectRatio": "16:9", "imageSize": "2K"}
+assert data["output"].endswith(".jpg")' "$out"
+}
+
 assert_test 'generate_image.sh --dry-run without API key' test_generate_dry_run
 assert_test 'edit_image.sh --dry-run without API key' test_edit_dry_run
+assert_test 'generate_image.sh --dry-run gemini without API key' test_gemini_dry_run
 
 if ((failures > 0)); then
   printf '\n%d/%d dry-run no-key tests failed.\n' "$failures" "$total" >&2

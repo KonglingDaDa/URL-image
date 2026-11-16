@@ -66,5 +66,21 @@
       "use_instead": ["9:16", "9:16@4k"],
       "reason": "请用比例简写，不要手写 4K 像素"
     }
-  ]
+  ],
+  "gemini": {
+    "note": "Gemini 生图（generateContent）用宽高比 + 档位，不用像素；网关固定返回 JPEG",
+    "aspect_ratios": ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "21:9", "4:1", "1:4", "8:1", "1:8"],
+    "image_sizes": ["1K", "2K", "4K"],
+    "default_aspect_ratio": "1:1",
+    "default_image_size": "1K",
+    "pixel_aliases": [
+      { "input": "1024x1024", "aspect_ratio": "1:1", "image_size": "1K", "note": "默认值，对应 1:1 1K" },
+      { "input": "1280x720", "aspect_ratio": "16:9", "image_size": "1K", "note": "近似为 16:9 1K" }
+    ],
+    "forbidden": [
+      { "input": "3:1", "use_instead": ["4:1", "21:9"], "reason": "Gemini 没有 3:1" },
+      { "input": "1:3", "use_instead": ["1:4", "9:16"], "reason": "Gemini 没有 1:3" },
+      { "input": "512", "use_instead": ["1k"], "reason": "网关实测 512 档被忽略，仍出 1K" }
+    ]
+  }
 }

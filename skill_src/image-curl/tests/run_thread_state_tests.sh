@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
+# Thread placeholders through the real entry script (edit_image.sh --dry-run).
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 skill_root="$(cd "$script_dir/.." && pwd)"
-# shellcheck source=../scripts/common.sh
-source "$skill_root/scripts/common.sh"
-
-thread_state_py="${skill_root}/scripts/lib/thread_state.py"
-[[ -f "$thread_state_py" ]] || die "未找到 $thread_state_py"
+edit_script="${skill_root}/scripts/edit_image.sh"
 
 failures=0
 total=0
@@ -24,73 +21,64 @@ assert_test() {
   fi
 }
 
-new_temp_codex_home() {
-  mktemp -d "${TMPDIR:-/tmp}/image-curl-thread-test.XXXXXX"
-}
+unset IMAGE_CURL_API_KEY IMAGE_CURL_GEMINI_API_KEY OPENAI_API_KEY CLIPROXY_API_KEY CODEX_THREAD_ID CODEX_SESSION_ID 2>/dev/null || true
+export IMAGE_CURL_ENV_FILE="${TMPDIR:-/tmp}/image-curl-tests-no-local.env"
 
 write_minimal_png() {
-  python3 - "$1" <<'PY'
-import base64
-import sys
-from pathlib import Path
-png = base64.b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
-)
-Path(sys.argv[1]).write_bytes(png)
-PY
+  python3 -c 'import base64,sys; open(sys.argv[1],"wb").write(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="))' "$1"
 }
 
-test_resolve_last_output() {
-  local codex_home
-  codex_home="$(new_temp_codex_home)"
-  local thread_dir="${codex_home}/generated_images/manual"
+# Prints the dry-run image[] list, one path per line.
+dry_run_images() {
+  python3 -c 'import json,sys; [print(p) for p in json.loads(sys.stdin.read())["multipart"]["image[]"]]'
+}
+
+test_last_output_index() {
+  local codex_home thread_dir first second out
+  codex_home="$(mktemp -d "${TMPDIR:-/tmp}/image-curl-thread-test.XXXXXX")"
+  thread_dir="${codex_home}/generated_images/manual"
   mkdir -p "$thread_dir"
-  local first="${thread_dir}/first-out.png"
-  local second="${thread_dir}/second-out.png"
+  first="${thread_dir}/first-out.png"
+  second="${thread_dir}/second-out.png"
   write_minimal_png "$first"
   write_minimal_png "$second"
-  python3 - "$thread_dir" "$first" "$second" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-thread_dir, first, second = sys.argv[1:4]
-payload = {
-    "thread_id": "manual",
-    "images": [str(Path(first).resolve()), str(Path(second).resolve())],
-}
-Path(thread_dir, "last_output_set.json").write_text(
-    json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-    encoding="utf-8",
-)
-PY
-
-  CODEX_HOME="$codex_home"
-  export CODEX_HOME
-  unset CODEX_THREAD_ID CODEX_SESSION_ID
-  local result
-  result="$(resolve_image_refs manual --image "[Last Output #2]")"
-  local count
-  count="$(python3 -c 'import json,sys; print(len(json.loads(sys.stdin.read())))' <<<"$result")"
-  [[ "$count" == "1" ]] || return 1
+  python3 -c 'import json,sys; open(sys.argv[1],"w").write(json.dumps({"thread_id":"manual","images":sys.argv[2:]}))' \
+    "${thread_dir}/last_output_set.json" "$first" "$second"
+  out="$(CODEX_HOME="$codex_home" "$edit_script" --image '[Last Output #2]' --prompt t --name t --dry-run)" || {
+    rm -rf "$codex_home"
+    return 1
+  }
   rm -rf "$codex_home"
+  [[ "$(dry_run_images <<<"$out")" == "$second" ]]
 }
 
 test_rollout_requires_thread() {
-  local codex_home
-  codex_home="$(new_temp_codex_home)"
-  CODEX_HOME="$codex_home"
-  export CODEX_HOME
-  unset CODEX_THREAD_ID CODEX_SESSION_ID
-  if resolve_image_refs manual --image "[Image #1]" >/dev/null 2>&1; then
+  local codex_home err
+  codex_home="$(mktemp -d "${TMPDIR:-/tmp}/image-curl-thread-test.XXXXXX")"
+  if err="$(CODEX_HOME="$codex_home" "$edit_script" --image '[Image #1]' --prompt t --name t --dry-run 2>&1)"; then
     rm -rf "$codex_home"
     return 1
   fi
   rm -rf "$codex_home"
+  grep -q 'CODEX_THREAD_ID' <<<"$err"
 }
 
-assert_test "resolve [Last Output] from manual fixture" test_resolve_last_output
+test_hash_in_file_name() {
+  local dir img out
+  dir="$(mktemp -d "${TMPDIR:-/tmp}/image-curl-hash.XXXXXX")"
+  img="${dir}/img#2.png"
+  write_minimal_png "$img"
+  out="$(CODEX_HOME="$dir" "$edit_script" --image "$img" --prompt t --name t --dry-run)" || {
+    rm -rf "$dir"
+    return 1
+  }
+  rm -rf "$dir"
+  [[ "$(dry_run_images <<<"$out")" == "$img" ]]
+}
+
+assert_test "edit resolves [Last Output #2] from manual fixture" test_last_output_index
 assert_test "rollout placeholder fails without thread env" test_rollout_requires_thread
+assert_test "local path containing # survives the wrapper" test_hash_in_file_name
 
 if ((failures > 0)); then
   printf '\n%d/%d thread state tests failed.\n' "$failures" "$total" >&2

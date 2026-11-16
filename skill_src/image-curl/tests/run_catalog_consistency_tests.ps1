@@ -16,7 +16,7 @@ foreach ($path in @($CommonPath, $AllowedJsonPath, $NormalizePy)) {
 
 . $CommonPath
 
-$python = Get-ThreadStatePython
+$python = Get-ImageCurlPython
 $catalog = Get-Content -LiteralPath $AllowedJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $failures = 0
 

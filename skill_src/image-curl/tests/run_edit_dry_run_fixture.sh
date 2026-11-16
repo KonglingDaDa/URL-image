@@ -4,8 +4,6 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 skill_root="$(cd "$script_dir/.." && pwd)"
-# shellcheck source=../scripts/common.sh
-source "${skill_root}/scripts/common.sh"
 edit_script="${skill_root}/scripts/edit_image.sh"
 
 failures=0
@@ -24,7 +22,9 @@ assert_test() {
 }
 
 saved_key="${IMAGE_CURL_API_KEY-}"
-unset IMAGE_CURL_API_KEY OPENAI_API_KEY CLIPROXY_API_KEY 2>/dev/null || true
+unset IMAGE_CURL_API_KEY IMAGE_CURL_GEMINI_API_KEY OPENAI_API_KEY CLIPROXY_API_KEY 2>/dev/null || true
+# Ignore the developer's real local.env so "without API key" really has no key.
+export IMAGE_CURL_ENV_FILE="${TMPDIR:-/tmp}/image-curl-tests-no-local.env"
 
 cleanup() {
   if [[ -n "${saved_key:-}" ]]; then
@@ -79,22 +79,9 @@ if images[0].replace("\\", "/") != expected:
 PY
 }
 
-test_bash_array_to_json_empty() {
-  local json
-  json="$(bash_array_to_json)"
-  [[ "$json" == "[]" ]]
-}
-
-test_bash_array_to_json_items() {
-  local json
-  json="$(bash_array_to_json 'alpha' 'beta')"
-  python3 -c 'import json,sys; data=json.loads(sys.argv[1]); sys.exit(0 if data==["alpha","beta"] else 1)' "$json"
-}
 
 assert_test 'edit_image.sh --image only dry-run (no --image-set)' test_edit_local_image_dry_run
 assert_test 'edit_image.sh --image-set last-output dry-run fixture' test_edit_last_output_fixture
-assert_test 'bash_array_to_json empty array' test_bash_array_to_json_empty
-assert_test 'bash_array_to_json with items' test_bash_array_to_json_items
 
 if ((failures > 0)); then
   printf '\n%d/%d edit dry-run fixture tests failed.\n' "$failures" "$total" >&2
