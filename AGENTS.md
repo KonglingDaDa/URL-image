@@ -54,7 +54,8 @@ scripts/lib/image_curl.py   全部行为：参数解析、Key / base URL、尺�
 
 ## 网关事实（2026-11-16 实测 aicode.cat）
 
-- GPT 分组 `/v1/models`：`gpt-image-2`、`gpt-image-2.5`、`gpt-image-2.6` 及 `-flare` / `-sunburst` 档位。
+- GPT 分组 `/v1/models`：`gpt-image-2`、`gpt-image-2.5`、`gpt-image-2.6` 及 `-flare` / `-sunburst` 档位。默认用 `gpt-image-2.6`，GPT 尺寸白名单 13 种已用它全部实测。
+- GPT 大图（3840 级、`16:9@2k` 等）只返回 `data[].url`，不给 `b64_json`；链接主机（S3 预签名、`img.dengche.cc` 等）对 Python 默认的 `Python-urllib` User-Agent 返回 403，用 curl 下载正常。所以下载一律走 curl，下载失败只重试下载，**不能**重新生成（图已生成并计费）。
 - Gemini 分组 `/v1beta/models`：`gemini-3.1-flash-image`、`gemini-nano-banana-2.1`。
 - Gemini 分组的 Key 调 `/v1/images/*` 返回 404 `Images API is not supported for this platform`；GPT 分组的 Key 调 Gemini 返回 400 `API key group platform is not gemini`。
 - Gemini 只返回 JPEG（`outputMimeType` 被忽略），每次一张；`imageSize` 的 `512` 被忽略；不合法的 `aspectRatio` 不报错而是被忽略，所以客户端必须自己校验。

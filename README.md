@@ -4,12 +4,12 @@
   <img src="aicodecat.png" alt="aicode.cat 标识">
 </p>
 
-> 生图技能 `image-curl`：用 `curl` 调用 [aicode.cat](https://aicode.cat) 的生图接口，支持 **GPT 生图**（`gpt-image-2` 等）与 **Gemini 生图**（`gemini-nano-banana-2.1` 等），完成文生图、图生图、批量生图与线程内改图。
+> 生图技能 `image-curl`：用 `curl` 调用 [aicode.cat](https://aicode.cat) 的生图接口，支持 **GPT 生图**（`gpt-image-2.6` 等）与 **Gemini 生图**（`gemini-nano-banana-2.1` 等），完成文生图、图生图、批量生图与线程内改图。
 
 `URL-image` 仓库打包了面向 aicode.cat 的生图技能，Codex 与 Claude Code 都能用。它读取 skill 目录 `local.env` 中的生图专用 Key，把结果保存为本地图片文件。
 
 - **默认接入 `https://aicode.cat`**
-- GPT 生图：`POST /v1/images/generations`、`POST /v1/images/edits`，默认模型 `gpt-image-2`
+- GPT 生图：`POST /v1/images/generations`、`POST /v1/images/edits`，默认模型 `gpt-image-2.6`
 - Gemini 生图：`POST /v1beta/models/{model}:generateContent`，默认模型 `gemini-nano-banana-2.1`
 - 按模型名自动选接口；两类 Key 分开放：`IMAGE_CURL_API_KEY`（GPT 分组）、`IMAGE_CURL_GEMINI_API_KEY`（Gemini 分组）
 - 不依赖 `cpa`、`cliproxy-image-cli` 或其他生图 CLI
@@ -19,7 +19,7 @@
 
 | 需求 | 选 |
 |---|---|
-| 默认、透明背景、PNG / WebP 输出、蒙版局部改图、`--input-fidelity` | GPT（`gpt-image-2` 等） |
+| 默认、透明背景、PNG / WebP 输出、蒙版局部改图、`--input-fidelity` | GPT（`gpt-image-2.6` 等） |
 | 用户点名 Gemini / Nano Banana、超宽超高比例（`4:1`、`1:8` 等）、多张参考图合成（最多 14 张） | Gemini（`gemini-nano-banana-2.1`、`gemini-3.1-flash-image`） |
 
 当前 Key 能用哪些模型，跑 `image-curl.sh models` 查。各型号单价看 aicode.cat 控制台。

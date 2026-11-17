@@ -279,7 +279,7 @@ def test_openai_generate_and_multi_count(env):
     assert json.loads(proc.stdout) == {"saved_file": single.as_posix(), "bytes": len(PNG_1PX), "revised_prompt": "rp"}
     call = env.calls()[0]
     assert call["headers"]["Authorization"] == f"Bearer {GPT_KEY}" and GPT_KEY not in " ".join(call["argv"])
-    assert call["data"]["model"] == "gpt-image-2" and call["data"]["n"] == 1
+    assert call["data"]["model"] == "gpt-image-2.6" and call["data"]["n"] == 1
 
     proc = env.run("generate", "--prompt", "p", "--n", "2", "--output", str(env.root / "two.png"), extra_env={"IMAGE_CURL_API_KEY": GPT_KEY})
     assert proc.returncode == 0, proc.stderr
@@ -362,3 +362,44 @@ def test_existing_output_is_protected(env):
     target.write_bytes(b"x")
     proc = env.run("generate", "--prompt", "p", "--output", str(target), "--dry-run")
     assert proc.returncode == 1 and "输出文件已存在" in proc.stderr
+
+
+def test_openai_url_is_downloaded_with_curl_then_bearer(env):
+    url = "https://img.example/files/a.png?x-resource-length=68"
+    env.script([
+        {"match": "/v1/images/generations", "json": {"data": [{"url": url}]}},
+        {"match": "img.example", "status": 403, "body": "forbidden"},
+        {"match": "img.example", "status": 200, "body_b64": base64.b64encode(PNG_1PX).decode()},
+    ])
+    out = env.root / "u.png"
+    proc = env.run("generate", "--prompt", "p", "--output", str(out), extra_env={"IMAGE_CURL_API_KEY": GPT_KEY})
+    assert proc.returncode == 0, proc.stderr
+    assert out.read_bytes() == PNG_1PX
+    gets = [call for call in env.calls() if "img.example" in call["url"]]
+    assert len(gets) == 2 and "-L" in gets[0]["argv"]
+    assert "Authorization" not in gets[0]["headers"] and gets[1]["headers"]["Authorization"] == f"Bearer {GPT_KEY}"
+
+
+def test_failed_download_never_regenerates(env):
+    url = "https://img.example/files/b.png"
+    env.script([
+        {"match": "/v1/images/generations", "json": {"data": [{"url": url}]}},
+        {"match": "img.example", "status": 502, "body": "bad gateway"},
+        {"match": "img.example", "status": 502, "body": "bad gateway"},
+    ])
+    proc = env.run("generate", "--prompt", "p", "--output", str(env.root / "b.png"), extra_env={"IMAGE_CURL_API_KEY": GPT_KEY})
+    assert proc.returncode == 1
+    assert "图片已生成" in proc.stderr and url in proc.stderr
+    assert sum(1 for call in env.calls() if "/v1/images/generations" in call["url"]) == 1
+
+
+def test_model_not_in_group_lists_available_models(env):
+    env.script([
+        {"match": "/v1/images/generations", "status": 404,
+         "json": {"error": {"code": "model_not_found", "message": "Model \"gpt-image-9\" is not available for this group"}}},
+        {"match": "/v1/models", "json": {"data": [{"id": "gpt-image-2"}, {"id": "gpt-image-2.6"}]}},
+    ])
+    proc = env.run("generate", "--model", "gpt-image-9", "--prompt", "p", "--output", str(env.root / "m.png"),
+                   extra_env={"IMAGE_CURL_API_KEY": GPT_KEY})
+    assert proc.returncode == 1
+    assert "该分组可用：gpt-image-2、gpt-image-2.6" in proc.stderr

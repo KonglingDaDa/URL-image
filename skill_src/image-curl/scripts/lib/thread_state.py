@@ -22,7 +22,7 @@ import re
 import sys
 from pathlib import Path
 from typing import Iterable, NoReturn
-from urllib import error, request
+from urllib import request
 from urllib import parse as urlparse
 
 ROLLOUT_MAX_BYTES = 8 * 1024 * 1024
@@ -209,7 +209,9 @@ def cache_rollout_remote_image(thread_id: str, raw: str) -> str | None:
         return None
 
     try:
-        with request.urlopen(raw, timeout=20) as response:
+        # Some image hosts answer 403 to the default "Python-urllib" User-Agent.
+        remote = request.Request(raw, headers={"User-Agent": "image-curl/2.0"})
+        with request.urlopen(remote, timeout=20) as response:
             content_type = response.headers.get_content_type().lower()
             if not content_type.startswith("image/"):
                 return None

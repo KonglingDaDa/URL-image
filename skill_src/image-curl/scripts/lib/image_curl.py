@@ -36,8 +36,6 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, NoReturn
-from urllib import error as urlerror
-from urllib import request as urlrequest
 
 # Installed skill dirs may be read-only; do not drop __pycache__ next to the scripts.
 sys.dont_write_bytecode = True
@@ -50,7 +48,7 @@ import parse_batch_jsonl  # noqa: E402
 import thread_state  # noqa: E402
 
 DEFAULT_BASE_URL = "https://aicode.cat"
-DEFAULT_OPENAI_MODEL = "gpt-image-2"
+DEFAULT_OPENAI_MODEL = "gpt-image-2.6"
 DEFAULT_GEMINI_MODEL = "gemini-nano-banana-2.1"
 DEFAULT_SIZE = "1024x1024"
 DEFAULT_TIMEOUT = 300
@@ -430,6 +428,7 @@ def run_curl(
     timeout: int,
     data_file: Path | None = None,
     form: list[tuple[str, str]] | None = None,
+    follow_redirects: bool = False,
 ) -> HttpResponse:
     with tempfile.TemporaryDirectory(prefix="image-curl-") as tmp:
         body_path = Path(tmp) / "body"
@@ -448,6 +447,8 @@ def run_curl(
             "-K",
             "-",
         ]
+        if follow_redirects:
+            cmd.append("-L")
         if data_file is not None:
             cmd += ["--data-binary", f"@{data_file}"]
         for flag, value in form or []:
@@ -504,7 +505,9 @@ def api_error_hint(provider: str, status: int, message: str) -> str:
     return ""
 
 
-def raise_for_status(provider: str, response: HttpResponse) -> None:
+def raise_for_status(provider: str, response: HttpResponse, *, base_url: str = "", api_key: str = "") -> None:
+    """Raise on non-2xx. With base_url/api_key, a "model not in this group" error also lists
+    the models the group does have (one extra GET /models)."""
     if 200 <= response.status < 300:
         return
     message = api_error_message(response)
@@ -512,14 +515,24 @@ def raise_for_status(provider: str, response: HttpResponse) -> None:
     text = f"接口返回 HTTP {response.status}：{message}"
     if hint:
         text += f"。{hint}"
+    if base_url and api_key and message.lower().find("not available for this group") >= 0:
+        try:
+            available = fetch_models(provider, base_url, api_key, 30)
+            text += f"该分组可用：{'、'.join(available) or '（无）'}。"
+        except CliError as exc:
+            text += f"（查询可用模型失败：{exc}）"
     if response.status in RETRYABLE_HTTP:
         raise RetryableError(text)
     raise CliError(text)
 
 
-def with_retries(action: Callable[[], Any], *, label: str) -> Any:
+def retry_attempts() -> int:
     raw = os.environ.get("IMAGE_CURL_SAVE_RETRIES", "")
-    attempts = int(raw) if raw.isdigit() and int(raw) >= 1 else DEFAULT_RETRIES
+    return int(raw) if raw.isdigit() and int(raw) >= 1 else DEFAULT_RETRIES
+
+
+def with_retries(action: Callable[[], Any], *, label: str) -> Any:
+    attempts = retry_attempts()
     for attempt in range(1, attempts + 1):
         try:
             return action()
@@ -550,36 +563,35 @@ def decode_data_url(raw: str) -> bytes:
 
 
 def fetch_url_bytes(url: str, api_key: str) -> bytes:
-    """Download data[].url. Anonymous first (S3 pre-signed URLs break with extra headers),
-    then Bearer when the host answers 401/403."""
+    """Download data[].url with curl (the gateway's image host rejects Python's urllib).
+
+    Anonymous first (S3 pre-signed URLs break with extra headers), Bearer only when the host
+    answers 401/403. The image is already generated and billed, so a failing download is
+    retried on its own and never triggers a new generation.
+    """
     if url.lower().startswith("data:"):
-        return decode_data_url(url)
-    attempts: list[tuple[dict[str, str] | None, str]] = [(None, "无鉴权")]
-    if api_key:
-        attempts.append(({"Authorization": f"Bearer {api_key}"}, "Bearer"))
-    last_error: Exception | None = None
-    for headers, label in attempts:
         try:
-            req = urlrequest.Request(url, headers=headers or {})
-            with urlrequest.urlopen(req, timeout=URL_FETCH_TIMEOUT) as resp:
-                body = resp.read()
-            if not body:
-                raise ValueError(f"{label}下载结果为空")
-            return body
-        except urlerror.HTTPError as exc:
-            last_error = exc
-            if headers is None and exc.code in (401, 403) and api_key:
-                continue
-            raise RetryableError(
-                f"从 data[].url 下载图片失败（{label} HTTP {exc.code}）：{exc.reason}。"
-                "若链接主机不接受当前 Key，请重试或要求网关返回 b64_json。"
-            ) from None
-        except Exception as exc:  # network errors
-            last_error = exc
-            if headers is None and api_key:
-                continue
-            raise RetryableError(f"从 data[].url 下载图片失败（{label}）：{exc}") from None
-    raise RetryableError(f"从 data[].url 下载图片失败：{last_error}")
+            return decode_data_url(url)
+        except ValueError as exc:
+            raise CliError(f"data[].url 不是合法的 data URL：{exc}") from None
+
+    def download() -> bytes:
+        response = run_curl("GET", url, headers={}, timeout=URL_FETCH_TIMEOUT, follow_redirects=True)
+        if response.status in (401, 403) and api_key:
+            response = run_curl(
+                "GET", url, headers={"Authorization": f"Bearer {api_key}"}, timeout=URL_FETCH_TIMEOUT, follow_redirects=True
+            )
+        if 200 <= response.status < 300 and response.body:
+            return response.body
+        message = f"HTTP {response.status}" if response.status else "空响应"
+        if response.status in RETRYABLE_HTTP or not response.body:
+            raise RetryableError(message)
+        raise CliError(message)
+
+    try:
+        return with_retries(download, label="下载图片")
+    except CliError as exc:
+        raise CliError(f"图片已生成，但从 data[].url 下载失败（{exc}）。可用浏览器手动打开：{url}") from None
 
 
 def openai_item_bytes(item: Any, index: int, api_key: str) -> bytes:
@@ -1055,7 +1067,7 @@ def execute_openai(task: Task) -> dict[str, Any]:
                     timeout=task.timeout,
                     data_file=body,
                 )
-        raise_for_status("openai", response)
+        raise_for_status("openai", response, base_url=task.base_url, api_key=task.api_key)
         return save_openai_response(
             response.json(),
             task.output,
@@ -1079,7 +1091,7 @@ def execute_gemini(task: Task) -> dict[str, Any]:
 
             def attempt() -> tuple[bytes, str, str, Any]:
                 response = run_curl("POST", task.endpoint, headers=headers, timeout=task.timeout, data_file=body)
-                raise_for_status("gemini", response)
+                raise_for_status("gemini", response, base_url=task.base_url, api_key=task.api_key)
                 data = response.json()
                 image_bytes, mime, text = extract_gemini_image(data)
                 return image_bytes, mime, text, data
@@ -1178,7 +1190,8 @@ GENERATE_USAGE = """用法：
   --output-dir DIR      输出目录；与 --name 组合成「前缀-随机后缀」
   --name PREFIX         文件名前缀；不给 --output-dir 时写入默认目录
                         （IMAGE_CURL_OUTPUT_DIR → ~/.codex/generated_images → ./.image-curl-output）
-  --model NAME          模型，默认 gpt-image-2；gemini-* 模型自动走 Gemini 接口
+  --model NAME          模型，默认 gpt-image-2.6；gemini-* 模型自动走 Gemini 接口
+                        （可用模型用 `image-curl models` 查）
   --provider P          auto（默认，按模型判断）、openai、gemini
   --size SIZE           GPT：白名单（1024x1024、16:9、9:16@2k、4k@16:9 等）
                         Gemini：宽高比[@档位]（1:1、16:9@2k、4:1、4k 等）

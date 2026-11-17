@@ -2,7 +2,7 @@
 """Fake curl for image-curl tests.
 
 Reads the scripted responses from $FAKE_CURL_SCRIPT (JSON list, consumed in order):
-  [{"match": "generateContent", "status": 200, "json": {...}} | {"body": "text"}, ...]
+  [{"match": "generateContent", "status": 200, "json": {...}} | {"body": "text"} | {"body_b64": "..."}, ...]
 Appends every call to $FAKE_CURL_LOG (JSON lines): argv, url, headers from -K stdin,
 the --data-binary body (parsed JSON when possible) and -F/--form-string fields.
 """
@@ -57,9 +57,14 @@ def main() -> int:
     if chosen.get("exit"):
         sys.stderr.write(chosen.get("stderr", "fake curl failure") + "\n")
         return int(chosen["exit"])
-    body = json.dumps(chosen["json"]) if "json" in chosen else chosen.get("body", "")
     if out_path:
-        Path(out_path).write_text(body, encoding="utf-8")
+        if "body_b64" in chosen:
+            import base64
+
+            Path(out_path).write_bytes(base64.b64decode(chosen["body_b64"]))
+        else:
+            body = json.dumps(chosen["json"]) if "json" in chosen else chosen.get("body", "")
+            Path(out_path).write_text(body, encoding="utf-8")
     sys.stdout.write(str(chosen.get("status", 200)))
     return 0
 

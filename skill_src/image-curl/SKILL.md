@@ -11,7 +11,7 @@ description: 只要用户提出绘制、生成、创作、编辑、变换图片�
 
 | 类别 | 模型（以 `models` 子命令输出为准） | 接口 | Key 变量 |
 |---|---|---|---|
-| GPT 生图 | `gpt-image-2`（默认）、`gpt-image-2.5`、`gpt-image-2.6` 及其 `-flare` / `-sunburst` 档位 | `POST /v1/images/generations`、`/v1/images/edits` | `IMAGE_CURL_API_KEY` |
+| GPT 生图 | `gpt-image-2.6`（默认）、`gpt-image-2`、`gpt-image-2.5` 及其 `-flare` / `-sunburst` 档位 | `POST /v1/images/generations`、`/v1/images/edits` | `IMAGE_CURL_API_KEY` |
 | Gemini 生图 | `gemini-nano-banana-2.1`（Gemini 默认）、`gemini-3.1-flash-image` | `POST /v1beta/models/{model}:generateContent` | `IMAGE_CURL_GEMINI_API_KEY` |
 
 接口按模型名自动选：`gemini-*` 或含 `nano-banana` 的模型走 Gemini，其余走 GPT。也可用 `--provider gemini|openai` 强制指定。
@@ -29,7 +29,7 @@ description: 只要用户提出绘制、生成、创作、编辑、变换图片�
 1. 用户点名模型 → 用点名的模型。
 2. 用户说「Gemini」「Nano Banana」「香蕉」 → `--model gemini-nano-banana-2.1`。
 3. 用户要透明背景、蒙版局部改图、PNG / WebP 输出 → 用 GPT 模型（Gemini 不支持这些）。
-4. 其余 → 默认 `gpt-image-2`；`local.env` 里设了 `IMAGE_CURL_MODEL` 就用它。
+4. 其余 → 默认 `gpt-image-2.6`；`local.env` 里设了 `IMAGE_CURL_MODEL` 就用它。
 5. 不确定当前 Key 能用哪些模型 → 先跑 `image-curl.sh models`。
 
 ## 运行环境
@@ -67,7 +67,7 @@ Key 读取顺序：
 
 | 项 | GPT | Gemini |
 |---|---|---|
-| 模型 | `gpt-image-2` | `gemini-nano-banana-2.1`（`--provider gemini` 不给 `--model` 时） |
+| 模型 | `gpt-image-2.6` | `gemini-nano-banana-2.1`（`--provider gemini` 不给 `--model` 时） |
 | 尺寸 | `1024x1024` | 文生图 `1:1` 1K；改图沿用输入图比例 |
 | 输出格式 | `png`（可 `jpeg` / `webp`） | 固定 JPEG，文件名改为 `.jpg` |
 | 张数 | 一次请求 `n` 张（1–10） | 每张单独请求，最多 4 张并行（1–10） |
@@ -103,7 +103,7 @@ Key 读取顺序：
 | `16:9@2k` / `9:16@2k` | `3584x2016` / `2016x3584` | 2K 横 / 竖 |
 | `4k@16:9`（= `16:9@4k`）/ `4k@9:16`（= `9:16@4k`） | `3840x2160` / `2160x3840` | 4K 横 / 竖 |
 
-不要用：单独的 `4k`（会变 4096x4096，超过最长边 3840）、`1920x1080`、`1080x1920`、`1000x1800`、`800x600`、`512x512`、`4096x4096`、手写的 `3840x2160` / `2160x3840`。脚本会拒绝并给出替代写法。白名单像素（`1024x1024`、`1280x720`）会在提示词末尾追加画布约束。白名单是用 `gpt-image-2` 实测的；其他 GPT 型号报尺寸错误时改用 `1024x1024`。
+不要用：单独的 `4k`（会变 4096x4096，超过最长边 3840）、`1920x1080`、`1080x1920`、`1000x1800`、`800x600`、`512x512`、`4096x4096`、手写的 `3840x2160` / `2160x3840`。脚本会拒绝并给出替代写法。白名单像素（`1024x1024`、`1280x720`）会在提示词末尾追加画布约束。2026-11-16 已用 `gpt-image-2.6` 把白名单全部实测一遍（之前用 `gpt-image-2` 测过）；其他 GPT 型号报尺寸错误时改用 `1024x1024`。
 
 ### Gemini：宽高比 + 档位
 
@@ -135,7 +135,7 @@ Key 读取顺序：
 | 多个 prompt 批量出图 | `generate-batch` | `--input` JSONL + `--output-dir`；不支持全局 `--prompt` / `--output` / `--name` |
 | 继续改上次结果 | `edit --image-set last-output` 或 `--image '[Last Output]'` | edit 不隐式继承状态 |
 | 引用对话附件 | `edit --image '[Image #N]'` 等 | 需 `CODEX_THREAD_ID` / `CODEX_SESSION_ID` |
-| 局部改图（蒙版） | `edit --mask` | 仅 GPT；PNG，透明区为编辑区 |
+| 局部改图（蒙版） | `edit --mask` | 仅 GPT；与原图同尺寸的 PNG，透明区为编辑区；蒙版是引导，相邻内容可能被连带改动 |
 | 高保真保留输入 | `edit --input-fidelity high` | 仅 GPT |
 | 查当前 Key 能用的模型 | `models` | 两个 Key 都配了就两组都查 |
 
@@ -227,7 +227,7 @@ $image-curl image="[Last Output]" image="[Image #1]" prompt="融合风格" name=
 | `输出文件已存在` | 换 `--name` / 路径，或用户同意后 `--overwrite` |
 | 尺寸被拒 | 按报错里的替代写法改；GPT 与 Gemini 的写法不同（见「尺寸」） |
 | Gemini 收到 `--mask` | Gemini 不支持蒙版；在提示词里写清要改的区域，或改用 GPT 模型 |
-| GPT 缺少 `b64_json` / `url` 下载失败 | 网关会在两种返回间切换；脚本先解 b64，否则下载 url（先无鉴权，401/403 再带 Bearer），并自动重试 |
+| GPT 大图只返回 `url` / 下载失败 | 3840 级大图网关只给下载链接；脚本用 curl 下载（先无鉴权，401/403 再带 Bearer），只重试下载、不会重新生成；仍失败会打印链接，可用浏览器打开 |
 | 占位符 / `--image-set` 报缺 `CODEX_THREAD_ID` | 不在 Codex 线程内；改用本地路径 |
 | 找不到 curl / Python | 安装 curl（Windows 用系统 `curl.exe`）与 Python 3.8+ |
 | `.sh` Permission denied | `chmod +x scripts/*.sh` |

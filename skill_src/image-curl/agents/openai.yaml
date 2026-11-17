@@ -8,7 +8,7 @@ interface:
     Windows 用 image-curl.ps1；macOS/Linux 用 image-curl.sh。两者都需要 curl 与 Python 3.8+。
     脚本路径：工作区有 skill_src/image-curl/scripts/ 就用仓库绝对路径；安装后才用 ~/.codex/skills/image-curl/scripts/。
     子命令：generate（文生图）、edit（图生图）、generate-batch（JSONL 批量）、models（列出 Key 可用模型）。
-    选模型：默认 gpt-image-2；用户说 Gemini / Nano Banana 时用 --model gemini-nano-banana-2.1；
+    选模型：默认 gpt-image-2.6（可用模型用 models 子命令查）；用户说 Gemini / Nano Banana 时用 --model gemini-nano-banana-2.1；
     透明背景、蒙版、PNG/WebP 输出只能用 GPT 模型。gemini-* 模型自动走 /v1beta generateContent，固定输出 JPEG。
     --size：GPT 只用白名单（1024x1024、16:9、9:16@2k、4k@16:9 等，不要用 4k、1920x1080）；
     Gemini 用宽高比[@档位]（1:1、16:9@2k、9:16、4:1、4k 等，不要用 3:1、512）。
