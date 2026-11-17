@@ -54,7 +54,7 @@ description: 只要用户提出绘制、生成、创作、编辑、变换图片�
    - macOS / Linux 执行 `chmod 600 local.env`。
 4. 先 `--dry-run`（无 Key 也能跑），确认 `endpoint` 指向 `https://aicode.cat`、`authorization` 已打码；再真实生图一次。
 
-**禁止**把生图 Key 写入 `~/.codex/auth.json`、`~/.codex/config.toml`、`~/.claude/settings.json` 或任何全局配置；不要让用户把真实 Key 贴进对话，也不要提交进 git。
+**禁止**把生图 Key 写入 `~/.codex/auth.json`、`~/.codex/config.toml`、`~/.claude/settings.json` 或任何全局配置，也不要提交进 git。用户已经在对话里给了 Key（例如照文档站「一段话让 AI 自己装好」发来）时，照常写进 `local.env`，回复里不要显示 Key；用户没给时，不要主动要求把 Key 贴进对话，让用户自己编辑 `local.env`。
 
 Key 读取顺序：
 

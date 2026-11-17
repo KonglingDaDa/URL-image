@@ -56,6 +56,29 @@ $PSVersionTable.PSVersion; curl.exe --version; py -3 --version
 
 ## 安装
 
+### 最省事：一段话让 AI 自己装好
+
+把下面这段复制下来，在冒号后面粘贴你的生图 Key（只有一种就只填那一行），在 Codex 或 Claude Code 里新开对话发过去。AI 会自己下载、安装、写 `local.env`、跑 `models`，再出一张测试图。2026-11-16 在 Codex 和 Claude Code 上各实测通过。
+
+```text
+请帮我安装并配置 image-curl 生图技能，装好后测试出一张图。
+
+我的生图 Key（没有的那一行留空）：
+GPT 生图分组的 Key：
+Gemini 生图分组的 Key：
+
+请按下面做：
+1. 从 https://github.com/KonglingDaDa/URL-image 下载仓库，按其中 skill_src/image-curl/SKILL.md 的「安装与 Key 配置」安装技能：你是 Codex 就装到 ~/.codex/skills/image-curl，你是 Claude Code 就装到 ~/.claude/skills/image-curl（Windows 在用户目录下的同名位置）。已经装过就用新版覆盖。
+2. Key 只写进技能目录的 local.env：GPT 的写 IMAGE_CURL_API_KEY，Gemini 的写 IMAGE_CURL_GEMINI_API_KEY；只有 Gemini Key 时，再加一行 IMAGE_CURL_MODEL=gemini-nano-banana-2.1。不要写进其他文件，回复里也不要显示 Key。
+3. 运行技能的 models 子命令，确认能列出模型。
+4. 生成一张测试图，提示词「一只坐在窗边的橘猫，水彩风格」，尺寸用默认的 1024x1024。两个 Key 都填了就 GPT、Gemini 各出一张。
+5. 最后告诉我：技能装在哪、能用哪些模型、测试图保存在哪。出错就给我看报错原文，并按 SKILL.md 的「异常处理」排查。
+```
+
+注意：这样做 Key 会留在聊天记录里，也会随对话发给 AI 模型服务。建议生图专门建一把 Key，并在控制台打开「额度限制」；不放心就用下面的手动安装。完整教程见 <https://docs.aicode.cat/image-generation>。
+
+### 手动安装
+
 ```bash
 git clone https://github.com/KonglingDaDa/URL-image.git
 cd URL-image

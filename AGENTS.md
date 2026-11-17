@@ -64,7 +64,7 @@ scripts/lib/image_curl.py   全部行为：参数解析、Key / base URL、尺�
 
 ## 配置与 Key
 
-Key **只能**写在 skill 目录 `local.env`：GPT 分组 → `IMAGE_CURL_API_KEY`，Gemini 分组 → `IMAGE_CURL_GEMINI_API_KEY`。禁止写入 `~/.codex/auth.json`、`~/.codex/config.toml`、`~/.claude/settings.json` 或任何全局配置；不要把真实 Key 写进对话或提交进 git。`local.env` 的值优先于同名环境变量；测试用 `IMAGE_CURL_ENV_FILE` 指向别的文件来隔离。读取顺序与其他变量见 `SKILL.md`。
+Key **只能**写在 skill 目录 `local.env`：GPT 分组 → `IMAGE_CURL_API_KEY`，Gemini 分组 → `IMAGE_CURL_GEMINI_API_KEY`。禁止写入 `~/.codex/auth.json`、`~/.codex/config.toml`、`~/.claude/settings.json` 或任何全局配置，也不要提交进 git；回复里不要显示 Key。用户按文档站的一段话把 Key 发进对话时，只写进 `local.env`。`local.env` 的值优先于同名环境变量；测试用 `IMAGE_CURL_ENV_FILE` 指向别的文件来隔离。读取顺序与其他变量见 `SKILL.md`。
 
 本仓内生图用仓库脚本：`<仓库>/skill_src/image-curl/scripts/image-curl.sh`（Windows `.ps1`），`local.env` 在 `skill_src/image-curl/local.env`。用户明确要求时才复制到 `~/.codex/skills/image-curl` 或 `~/.claude/skills/image-curl`。
 
